@@ -1,0 +1,240 @@
+---
+// The homepage. Four text sizes only: name 36px, hero intro 20px, body 17px, small 14px.
+// Compact hero: text first (name, intro, logos, latest) with the 3D slide figure beside it.
+// Below, full-width sections: the cell map sits right of the first-author publications and the serial-sections
+// figure left of "Other work", each exactly as tall as the text beside it.
+import { Image } from 'astro:assets';
+import Base from '../layouts/Base.astro';
+import Affiliations from '../components/Affiliations.astro';
+import SlideGraph from '../components/SlideGraph.astro';
+import CellMap from '../components/CellMap.astro';
+import SectionsGraph from '../components/SectionsGraph.astro';
+import portrait from '../assets/portrait.jpg';
+import { person, about, firstAuthor, otherWork, latest, cv, links } from '../data/site';
+
+const bold = (s: string) => s.replace(/Künzle T\.?/, (m) => `<b>${m}</b>`);
+const year = new Date().getFullYear();
+---
+
+<Base>
+  <div class="page">
+    <nav class="top" aria-label="Sections">
+      <a href="#about">About</a>
+      <a href="#publications">Publications</a>
+      <a href="#other">Other work</a>
+      <a href="#cv">CV</a>
+      <a href="#contact">Contact</a>
+      <button type="button" class="motion" aria-pressed="false">Pause motion</button>
+    </nav>
+
+    <main id="main">
+      <section class="hero" aria-label="Introduction">
+        <div class="hero-text">
+          <div class="who">
+            <h1 class="name">{person.name}</h1>
+            <p class="intro">{person.role}. {person.oneLine}</p>
+            <div class="aff-wrap"><Affiliations size={34} /></div>
+          </div>
+          <aside class="latest-mini" aria-labelledby="latest-h">
+            <h2 id="latest-h">Latest</h2>
+            <ul>{latest.map((n) => <li><time>{n.date}</time> {n.text}</li>)}</ul>
+          </aside>
+        </div>
+        <div class="hero-visual"><SlideGraph /></div>
+      </section>
+
+      <div class="catalogue">
+        <section id="about" class="row" aria-labelledby="about-h">
+          <h2 id="about-h">About</h2>
+          <div class="body about">
+            <Image class="portrait" src={portrait} widths={[132, 264, 396]} sizes="132px" alt="Tamara Künzle smiling in a garden full of pink flowers" />
+            <div class="about-text" style={`--fa:${about[0].length}fr;--fb:${about[1].length}fr`}>{about.map((p) => <p>{p}</p>)}</div>
+          </div>
+        </section>
+
+        <section id="publications" class="row" aria-labelledby="publications-h">
+          <h2 id="publications-h">First-author publications</h2>
+          <div class="body research">
+            <div class="qs">
+              {firstAuthor.map((r) => (
+                <article class="q">
+                  <h3>{r.question}</h3>
+                  {r.cite && (
+                    <p class="cite">
+                      <span set:html={bold(r.cite.authors)} /> {r.cite.title}. <i>{r.cite.venue}</i>. {r.cite.year}{r.cite.note && `;${r.cite.note}`}.
+                      {r.cite.doi && <> <a href={`https://doi.org/${r.cite.doi}`}>doi:{r.cite.doi}</a></>}
+                      {r.links.filter((l) => ['Code', 'Documentation'].includes(l.label)).map((l) => <> <a href={l.href}>{l.label.toLowerCase()}</a></>)}
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+            <div class="aside"><CellMap /></div>
+          </div>
+        </section>
+
+        <section id="other" class="row" aria-labelledby="other-h">
+          <h2 id="other-h">Other work</h2>
+          <div class="body other">
+            <div class="aside"><SectionsGraph end="graph" /></div>
+            <ul class="pubs">
+              {otherWork.map((o) => (
+                <li>
+                  {o.question && <h3>{o.question}</h3>}
+                  <span set:html={bold(o.authors)} /> {o.title}. <i>{o.venue}</i>. {o.year}.
+                  {o.doi && <> <a href={`https://doi.org/${o.doi}`}>doi:{o.doi}</a></>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
+        <section id="cv" class="row" aria-labelledby="cv-h">
+          <h2 id="cv-h">CV</h2>
+          <ol class="body cv" style={`--rows:${Math.ceil(cv.length / 2)}`}>{cv.map((c) => <li><time>{c.years}</time><span><b>{c.role}</b><br />{c.place}</span></li>)}</ol>
+        </section>
+
+        <section id="contact" class="row" aria-labelledby="contact-h">
+          <h2 id="contact-h">Contact</h2>
+          <p class="body contact">
+            <a class="email" data-u={person.email.user} data-d={person.email.domain} href="#contact">{person.email.user} [at] {person.email.domain}</a>
+            {links.map((l) => <a href={l.href}>{l.label}</a>)}
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <footer class="foot">
+      <p>© {year} {person.name}. The tissue in the figures is synthetic, drawn by code.</p>
+    </footer>
+  </div>
+</Base>
+
+<script>
+  import { motionPaused, setMotionPaused, restoreMotionPreference } from '../lib/tissue';
+
+  // "Pause motion" stops every moving figure on the page (and is remembered); hidden when the visitor's
+  // system already asks for reduced motion, because the figures are then still anyway
+  restoreMotionPreference();
+  const motionBtn = document.querySelector<HTMLButtonElement>('.motion')!;
+  const showMotion = () => { const p = motionPaused(); motionBtn.setAttribute('aria-pressed', String(p)); motionBtn.textContent = p ? 'Play motion' : 'Pause motion'; };
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) motionBtn.hidden = true;
+  motionBtn.addEventListener('click', () => { setMotionPaused(!motionPaused()); showMotion(); });
+  showMotion();
+
+  // the address is put together in the browser, so it is not in the HTML for scrapers
+  document.querySelectorAll<HTMLAnchorElement>('a.email').forEach((a) => {
+    const addr = `${a.dataset.u}@${a.dataset.d}`; a.href = `mailto:${addr}`; a.textContent = addr;
+  });
+
+  // About: the two paragraphs sit side by side. Tune the column widths until both are the same height,
+  // so the columns end on the same line whatever the screen width.
+  const narrow = matchMedia('(max-width: 900px)');
+  function balance(el: HTMLElement) {
+    const [a, b] = [...el.querySelectorAll<HTMLElement>('p')];
+    if (!a || !b || !el.offsetWidth) return;
+    if (narrow.matches) { el.style.gridTemplateColumns = ''; return; }
+    let lo = 0.3, hi = 0.7;
+    for (let i = 0; i < 16; i++) {
+      const f = (lo + hi) / 2;
+      el.style.gridTemplateColumns = `minmax(0, ${f}fr) minmax(0, ${1 - f}fr)`;
+      const d = a.offsetHeight - b.offsetHeight;
+      if (Math.abs(d) < 2) break;
+      if (d > 0) lo = f; else hi = f;
+    }
+  }
+  const blocks = [...document.querySelectorAll<HTMLElement>('.about-text')];
+  const run = () => blocks.forEach(balance);
+  run(); document.fonts?.ready.then(run);
+  let bt = 0; window.addEventListener('resize', () => { clearTimeout(bt); bt = window.setTimeout(run, 120); });
+</script>
+
+<style>
+  .page {
+    --paper: #eceeea; --ink: #1d2521; --muted: #5f6964; --hema: #3b3a82; --rule: #d3d8d2;
+    --small: 14px; --pad: clamp(20px, 3.2vw, 48px);
+    background: var(--paper); color: var(--ink);
+    font: 400 17px/1.6 'Newsreader Variable', Georgia, serif; font-optical-sizing: auto;
+    position: relative;
+  }
+  a { color: var(--hema); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  a:hover { text-decoration-thickness: 2px; }
+  a:focus-visible { outline: 2px solid var(--hema); outline-offset: 3px; }
+  h1, h2, h3, p, ul, ol { margin: 0; }
+  ul, ol { list-style: none; padding: 0; }
+
+  .top { position: absolute; top: 20px; right: var(--pad); display: flex; gap: 22px; font-size: var(--small); z-index: 3; }
+  .top a { color: var(--ink); text-decoration: none; }
+  .top a:hover { text-decoration: underline; }
+  .motion { all: unset; cursor: pointer; color: var(--muted); font-style: italic; }
+  .motion:hover { color: var(--ink); text-decoration: underline; }
+  .motion:focus-visible { outline: 2px solid var(--hema); outline-offset: 3px; }
+  .motion[hidden] { display: none; }
+
+  /* compact hero: text first and wide, the figure embedded beside it rather than filling the screen */
+  .hero {
+    box-sizing: border-box;
+    display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr); gap: clamp(28px, 4vw, 72px); align-items: center;
+    padding: 84px var(--pad) 56px;
+  }
+  .hero-text { display: flex; flex-direction: column; gap: 40px; }
+  .latest-mini { font-size: var(--small); line-height: 1.6; }
+  .latest-mini h2 { font-size: var(--small); font-weight: 400; font-style: italic; color: var(--muted); margin-bottom: 4px; }
+  .latest-mini li { display: grid; grid-template-columns: 5.4em 1fr; gap: 0 8px; }
+  time { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .name { font-weight: 400; font-size: 36px; line-height: 1.12; letter-spacing: -0.01em; }
+  .intro { margin-top: 12px; max-width: 50ch; color: var(--muted); font-size: 20px; line-height: 1.5; }
+  .aff-wrap { margin-top: 26px; color: var(--ink); }
+  .hero-visual { position: relative; min-height: 0; height: clamp(300px, 50vh, 470px); }
+
+  .catalogue { padding: 0 var(--pad) 96px; }
+  .row { display: grid; grid-template-columns: minmax(130px, 15%) minmax(0, 1fr); gap: 24px; padding: 48px 0; border-top: 1px solid var(--rule); scroll-margin-top: 12px; }
+  .row > h2 { font-size: var(--small); font-weight: 400; font-style: italic; color: var(--muted); line-height: 1.9; }
+  .about { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 32px; align-items: start; }
+  .about :global(.portrait) { width: 100%; height: auto; display: block; }
+  /* one paragraph per column; widths start in proportion to the text lengths and the script evens the heights */
+  .about-text { display: grid; grid-template-columns: minmax(0, var(--fa, 1fr)) minmax(0, var(--fb, 1fr)); gap: 48px; align-items: start; }
+
+  .research { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr); gap: 40px; align-items: stretch; }
+  .research .q:last-child { margin-bottom: 0; }
+  .other { display: grid; grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1fr); gap: 40px; align-items: stretch; }
+  .q { margin-bottom: 26px; }
+  .q h3, .pubs h3 { font-size: inherit; font-weight: 600; line-height: 1.4; margin-bottom: 3px; color: var(--ink); }
+  .cite, .pubs li { color: #3a443f; }
+  .cite :global(b), .pubs :global(b) { font-weight: 600; color: var(--ink); }
+  /* a figure beside a text block takes that block's height: it is laid out absolutely so it adds none of its own */
+  .aside { position: relative; min-height: 300px; }
+  .aside > :global(figure) { position: absolute; inset: 0; height: auto; }
+  .aside :global(.stage) { min-height: 0; }
+
+  .pubs { display: grid; gap: 16px; align-content: start; }
+  /* grids rather than CSS columns, so rows line up across the two columns */
+  .cv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), auto); grid-auto-flow: column; gap: 14px 56px; }
+  .cv li { display: grid; grid-template-columns: 104px 1fr; gap: 14px; }
+  .cv b { font-weight: 600; }
+  .contact { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+  .foot { padding: 0 var(--pad) 40px; font-size: var(--small); color: var(--muted); }
+
+  @media (max-width: 900px) {
+    .top { position: static; padding: 16px 20px 0; flex-wrap: wrap; gap: 6px 16px; }
+    .top a, .motion { padding: 10px 0; }
+    .hero { grid-template-columns: 1fr; padding: 20px 20px 40px; }
+    .hero-text { gap: 28px; }
+    /* figures size to their content on small screens, not to the screen height */
+    .hero-visual { height: auto; }
+    .hero-visual :global(.stage) { aspect-ratio: 3 / 2; min-height: 0; }
+    .catalogue { padding-bottom: 64px; }
+    .row { grid-template-columns: 1fr; gap: 12px; padding: 36px 0; }
+    .about { grid-template-columns: 1fr; }
+    .about-text { grid-template-columns: 1fr !important; gap: 1em; }
+    .about :global(.portrait) { width: 132px; }
+    .research, .other { grid-template-columns: 1fr; }
+    .aside { min-height: 0; }
+    .aside > :global(figure) { position: static; }
+    .aside :global(.stage) { aspect-ratio: 1 / 1; }
+    .other .aside :global(.stage) { aspect-ratio: 4 / 3; }
+    .cv { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-flow: row; }
+    .cv li { grid-template-columns: 1fr; gap: 0; }
+    .foot { padding: 0 20px 32px; }
+  }
+</style>

@@ -1,0 +1,16 @@
+# Private originals — never publish (CV has a phone number)
+*.pdf
+Facetune_*.JPG
+IMG_*.JPG
+content/
+
+node_modules/
+dist/
+.astro/
+.DS_Store
+.cache/
+
+# Working notes for Claude and local tooling — never publish
+CLAUDE.md
+.claude/
+scripts/dev_shot_server.py

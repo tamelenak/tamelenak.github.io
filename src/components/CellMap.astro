@@ -1,0 +1,96 @@
+---
+// "Cells find their type" figure. The shared synthetic tissue drawn as segmentation-style
+// cell shapes on paper. Every cell starts unlabelled; labels spread through the Delaunay cell graph
+// from a few seed cells. Click a cell to start a new wave there. Generic label spreading.
+import { TYPES } from '../lib/tissue';
+---
+
+<figure class="typing">
+  <div class="stage">
+    <canvas class="ty-canvas" role="img" aria-label="A map of about 2,800 cells drawn as small rounded shapes. Starting grey, they take on colours for lymphoma B cells, T cells, macrophages and glial cells as labels spread from a few cells."></canvas>
+  </div>
+  <figcaption>
+    <ul class="legend">
+      {TYPES.map((t, i) => <li><i style={`--c:${t.colour}`}></i>{t.name}s <output data-type={i}>0</output></li>)}
+    </ul>
+  </figcaption>
+</figure>
+
+<script>
+  import { ctx2d, whenShown, loadTissue, cover, hiDPI, cellShapes, motionPaused, TYPES, PAPER } from '../lib/tissue';
+
+  async function init(fig: HTMLElement) {
+    const t = await loadTissue();
+    const canvas = fig.querySelector<HTMLCanvasElement>('.ty-canvas')!;
+    const ctx = ctx2d(canvas);
+    const outs = [...fig.querySelectorAll<HTMLOutputElement>('output[data-type]')];
+    const n = t.cells.length;
+    const { delaunay, shapes } = cellShapes(t);
+    const nbrs: number[][] = Array.from({ length: n }, () => []);
+    for (const [i, j] of t.edges) { nbrs[i].push(j); nbrs[j].push(i); }
+    const reveal = new Float64Array(n).fill(Infinity);
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let w = 0, h = 0, dpr = 1, tf = { s: 1, ox: 0, oy: 0 }, t0 = 0, raf = 0;
+
+    const rgb = (hex: string) => { const v = parseInt(hex.slice(1), 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; };
+    const GREY = rgb('#d3d7d0'), COL = TYPES.map((x) => rgb(x.colour));
+    function wave(seeds: number[], instant = reduce) {
+      const hop = new Int32Array(n).fill(-1), q: number[] = [];
+      seeds.forEach((s) => { hop[s] = 0; q.push(s); });
+      for (let k = 0; k < q.length; k++) for (const j of nbrs[q[k]]) if (hop[j] < 0) { hop[j] = hop[q[k]] + 1; q.push(j); }
+      for (let i = 0; i < n; i++) reveal[i] = instant ? 0 : hop[i] < 0 ? 2600 : hop[i] * 70 + (((i * 2654435761) >>> 0) % 997) / 997 * 60;
+      t0 = performance.now(); request();
+    }
+    function draw() {
+      raf = 0;
+      const now = performance.now() - t0;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = PAPER; ctx.fillRect(0, 0, w, h);
+      ctx.setTransform(tf.s * dpr, 0, 0, tf.s * dpr, tf.ox * dpr, tf.oy * dpr);
+      ctx.lineWidth = 0.7; ctx.strokeStyle = 'rgba(29,37,33,0.28)';
+      const counts = [0, 0, 0, 0];
+      let pending = false;
+      for (let i = 0; i < n; i++) {
+        const u = Math.min(1, Math.max(0, (now - reveal[i]) / 380)), c = COL[t.cells[i][3]];
+        if (u < 1) pending = true; else counts[t.cells[i][3]]++;
+        ctx.fillStyle = `rgb(${Math.round(GREY[0] + (c[0] - GREY[0]) * u)},${Math.round(GREY[1] + (c[1] - GREY[1]) * u)},${Math.round(GREY[2] + (c[2] - GREY[2]) * u)})`;
+        ctx.fill(shapes[i]); ctx.stroke(shapes[i]);
+      }
+      outs.forEach((o, k) => (o.textContent = counts[k].toLocaleString('en')));
+      if (pending && reveal[0] !== Infinity) request();
+    }
+    const request = () => { if (!raf) raf = requestAnimationFrame(draw); };
+    const resize = () => { ({ w, h, dpr } = hiDPI(canvas)); if (!w || !h) return; tf = cover(t, w, h); request(); };
+    const seeds = () => Array.from({ length: 6 }, (_, k) => Math.floor(((k * 0.173 + 0.061) % 1) * n));
+
+    canvas.addEventListener('click', (e) => {
+      const r = canvas.getBoundingClientRect();
+      wave([delaunay.find((e.clientX - r.left - tf.ox) / tf.s, (e.clientY - r.top - tf.oy) / tf.s)]);
+    });
+    let rt = 0;
+    new ResizeObserver(() => { clearTimeout(rt); rt = window.setTimeout(resize, 150); }).observe(canvas);
+    resize();
+    // the opening wave plays by itself only while motion is on; a click always plays it
+    setTimeout(() => wave(seeds(), reduce || motionPaused()), 500);
+    if (import.meta.env.DEV) { // test hooks for development only; stripped from the published build
+      (fig as any).__finish = () => { t0 = performance.now() - 60000; draw(); };
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('.typing').forEach((fig) => {
+    whenShown(fig, () => init(fig), 0.2);
+  });
+</script>
+
+<style>
+  .typing { margin: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; }
+  .stage { position: relative; min-height: 360px; }
+  .ty-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+  figcaption { font-size: 14px; line-height: 1.5; }
+  /* a fixed two-column grid with fixed-width counters: the legend keeps its size while the numbers change,
+     so the map above it never grows or shrinks during a wave */
+  .legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, max-content); gap: 4px 22px; color: #1d2521; }
+  .legend li { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .legend i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+  .legend output { color: #5f6964; font-variant-numeric: tabular-nums; display: inline-block; min-width: 4.4ch; }
+</style>

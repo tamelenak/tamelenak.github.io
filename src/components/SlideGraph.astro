@@ -1,0 +1,197 @@
+---
+// "Two views", 3D test. The tissue lies on a tilted microscope slide (axonometric, so the
+// H&E image maps with one affine transform). Right of the divider the cell graph lifts off the slide and
+// vibrates in its Laplacian eigenmodes like a drum skin. It opens on the full H&E; the divider then sweeps left to
+// reveal the graph and glides back and forth. It waits while the mouse is close to the divider and can be dragged.
+---
+
+<figure class="twoviews3d">
+  <div class="stage">
+    <canvas class="tv3-canvas" role="img" aria-label="A tilted microscope slide with a synthetic brain lymphoma section. On the left it is an H&E stain; on the right the cells become a network that rises off the slide and slowly vibrates in soft waves."></canvas>
+  </div>
+  <figcaption>
+    <p>A synthetic section on a slide. On the right, the cell graph lifts off the glass and vibrates in its own modes: eigenvectors of the graph Laplacian, two at a time, each swinging at a rate set by the square root of its eigenvalue. <output class="readout"></output></p>
+  </figcaption>
+</figure>
+
+<script>
+  import { ctx2d, whenShown, motionPaused, onMotionChange, loadTissue, hiDPI, drawHistology, scaledModes, boundaryPath, diverging } from '../lib/tissue';
+
+  async function init(fig: HTMLElement) {
+    const t = await loadTissue();
+    const canvas = fig.querySelector<HTMLCanvasElement>('.tv3-canvas')!;
+    const stage = fig.querySelector<HTMLElement>('.stage')!;
+    const ctx = ctx2d(canvas);
+    const modes = scaledModes(t);
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const n = t.cells.length;
+    // histology once, in tissue pixels, transparent outside the section
+    const Q = 1.6, hist = document.createElement('canvas');
+    hist.width = t.W * Q; hist.height = t.H * Q;
+    { const c = ctx2d(hist); c.setTransform(Q, 0, 0, Q, 0, 0); drawHistology(c, t, 'rgba(0,0,0,0)'); }
+
+    const YAW = -0.46, KY = 0.6, KZ = 0.8, AMP = 74;   // gentle lift: the waves should read as a calm swell
+    const cy_ = Math.cos(YAW), sy_ = Math.sin(YAW);
+    const order = Array.from({ length: n }, (_, i) => i).sort((a, b) => (t.cells[a][0] * sy_ + t.cells[a][1] * cy_) - (t.cells[b][0] * sy_ + t.cells[b][1] * cy_));
+    let w = 0, h = 0, dpr = 1, S = 1, cx = 0, cy = 0;
+    // The divider starts at the far right, so the page opens on the full H&E section; it then sweeps left to
+    // reveal the graph and glides back and forth between MIN and MAX.
+    const MAX = 0.985, MIN = 0.1, MIDP = (MAX + MIN) / 2, AMPL = (MAX - MIN) / 2;
+    let split = reduce ? 0.5 : MAX, phase = Math.PI / 2, wait = 1.6, auto = !reduce, dragging = false, visible = false, raf = 0, last = 0, clock = 0;
+    let mode = 1, mix = 0, modeClock = 0;
+    // a membrane obeys u'' = -L u, so mode k swings at a frequency proportional to sqrt(lambda_k)
+    const ev = t.eigenvalues, omega = ev.map((l) => ((Math.PI * 2) / 5.2) * Math.sqrt(l / ev[0])); // slowest mode: 5.2 s
+    const readout = fig.querySelector<HTMLOutputElement>('.readout')!;
+    const say = () => { const b = (mode + 1) % modes.length; readout.textContent = `Modes ${mode + 1} and ${b + 1} of ${modes.length}, eigenvalues ${ev[mode].toFixed(4)} and ${ev[b].toFixed(4)}.`; };
+    say();
+    const z = new Float32Array(n), px = new Float32Array(n), py = new Float32Array(n);
+    const bx = new Float32Array(n), by = new Float32Array(n);               // node positions flat on the slide
+    const BINS = 40, palette = Array.from({ length: BINS }, (_, b) => diverging(-1 + (2 * b) / (BINS - 1)));
+    const head = new Int32Array(BINS), nextIdx = new Int32Array(n);         // nodes bucketed by colour: 40 fills a frame, not 2,800
+    // the divider's path: mostly steady, with a short soft turn at each end (a pure sine lingers there)
+    const glide = (ph: number) => 0.62 * ((2 / Math.PI) * Math.asin(Math.sin(ph))) + 0.38 * Math.sin(ph);
+
+    const P = (x: number, y: number, zz = 0): [number, number] => {
+      const u = x - t.W / 2, v = y - t.H / 2;
+      return [cx + S * (u * cy_ - v * sy_), cy + S * (u * sy_ + v * cy_) * KY - S * zz * KZ];
+    };
+    function fit() {
+      // bounding box of the slide corners (and the lifted graph) at scale 1
+      const corners = [[0, 0], [t.W, 0], [t.W, t.H], [0, t.H]].map(([x, y]) => [(x - t.W / 2) * cy_ - (y - t.H / 2) * sy_, ((x - t.W / 2) * sy_ + (y - t.H / 2) * cy_) * KY]);
+      const xs = corners.map((c) => c[0]), ys = corners.map((c) => c[1]);
+      const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys) + AMP * KZ * 1.2;
+      S = Math.min((w * 0.98) / bw, (h * 0.98) / bh);
+      cx = w / 2; cy = h / 2 + (AMP * KZ * 0.6 * S) / 2;
+      for (let i = 0; i < n; i++) { const q = P(t.cells[i][0], t.cells[i][1]); bx[i] = q[0]; by[i] = q[1]; }
+    }
+    function frame(now: number) {
+      raf = 0;
+      const dt = motionPaused() ? 0 : Math.min(0.05, (now - last) / 1000 || 0); last = now;
+      if (auto && !dragging) {
+        if (wait > 0) wait -= dt;                                   // a short look at the full H&E before the sweep
+        else { phase += (dt * Math.PI * 2) / 24; split = MIDP + AMPL * glide(phase); }
+      }
+      const next = (mode + 1) % modes.length;
+      let sA = 1, sB = 1;
+      if (!reduce) {
+        // Two neighbouring modes are always sounding together, the weight drifting from one to the next.
+        // They swing at different rates, so the membrane never comes to rest the way a single mode does.
+        clock += dt; modeClock += dt;
+        const SPAN = 7.5, u = Math.min(1, modeClock / SPAN);
+        mix = 0.12 + 0.76 * (u * u * (3 - 2 * u));
+        if (u >= 1) { mode = next; modeClock = 0; mix = 0.12; say(); }
+        sA = Math.cos(omega[mode] * clock); sB = Math.cos(omega[(mode + 1) % modes.length] * clock);
+      }
+      const A = modes[mode], B = modes[(mode + 1) % modes.length];
+      const xd = split * t.W, lift0 = S * AMP * KZ;
+      head.fill(-1);
+      for (let k = n - 1; k >= 0; k--) {
+        const i = order[k], x = t.cells[i][0];
+        const val = A[i] * sA * (1 - mix) + B[i] * sB * mix;                 // a superposition of two eigenmodes
+        // flat on the glass at the divider, rising smoothly over a wide band, so the graph flows out of the H&E
+        const e = Math.min(1, Math.max(0, (x - xd) / 330)), ramp = e * e * (3 - 2 * e);
+        const zi = Math.max(-1, Math.min(1, val)) * ramp;
+        z[i] = zi; px[i] = bx[i]; py[i] = by[i] - zi * lift0;
+        if (x >= xd) { const b = Math.round((zi + 1) * 0.5 * (BINS - 1)); nextIdx[i] = head[b]; head[b] = i; }
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+      // the slide
+      const slide = [P(0, 0), P(t.W, 0), P(t.W, t.H), P(0, t.H)];
+      ctx.beginPath(); slide.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
+      ctx.fillStyle = 'rgba(255,255,255,0.42)'; ctx.fill(); ctx.strokeStyle = 'rgba(29,37,33,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+      // flat layers in slide space (affine)
+      const o = P(0, 0);
+      ctx.save();
+      ctx.transform(S * cy_, S * sy_ * KY, -S * sy_, S * cy_ * KY, o[0], o[1]);
+      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, xd, t.H); ctx.clip(); ctx.drawImage(hist, 0, 0, t.W, t.H); ctx.restore();
+      ctx.save(); ctx.beginPath(); ctx.rect(xd, 0, t.W - xd, t.H); ctx.clip(); boundaryPath(ctx, t); ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill(); ctx.restore();
+      ctx.beginPath(); ctx.moveTo(xd, 0); ctx.lineTo(xd, t.H); ctx.strokeStyle = '#1d2521'; ctx.lineWidth = 1.4 / S; ctx.stroke();
+      ctx.restore();
+      // the lifted, vibrating graph
+      ctx.lineWidth = 0.7; ctx.strokeStyle = 'rgba(29,37,33,0.22)'; ctx.beginPath();
+      for (const [i, j] of t.edges) { if (t.cells[i][0] < xd || t.cells[j][0] < xd) continue; ctx.moveTo(px[i], py[i]); ctx.lineTo(px[j], py[j]); }
+      ctx.stroke();
+      const R = Math.max(1.6, 2.6 * S);
+      for (let b = 0; b < BINS; b++) {
+        if (head[b] < 0) continue;
+        ctx.beginPath();
+        for (let i = head[b]; i >= 0; i = nextIdx[i]) { ctx.moveTo(px[i] + R, py[i]); ctx.arc(px[i], py[i], R, 0, Math.PI * 2); }
+        ctx.fillStyle = palette[b]; ctx.fill();
+      }
+      // grip on the near end of the divider
+      const g = P(xd, t.H);
+      ctx.beginPath(); ctx.arc(g[0], g[1], 9, 0, Math.PI * 2); ctx.fillStyle = '#eceeea'; ctx.fill(); ctx.strokeStyle = '#1d2521'; ctx.lineWidth = 1; ctx.stroke();
+      if (visible && !reduce && !motionPaused()) request();
+    }
+    const request = () => { if (!raf) raf = requestAnimationFrame(frame); };
+    onMotionChange(() => { last = performance.now(); request(); });
+    const resize = () => { ({ w, h, dpr } = hiDPI(canvas)); if (!w || !h) return; fit(); request(); };
+
+    // dragging moves the divider by as much as the pointer moves, so a click alone never makes it jump
+    const along = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect();
+      const u = (e.clientX - r.left - cx) / S, v = (e.clientY - r.top - cy) / (S * KY);
+      return (u * cy_ + v * sy_ + t.W / 2) / t.W;
+    };
+    let grabAt = 0;
+    const setFrom = (e: PointerEvent) => { const a = along(e); split = Math.min(MAX, Math.max(0.03, split + a - grabAt)); grabAt = a; request(); };
+    // pick the glide up again from wherever the divider was left (solve glide(phase) = position on the rising half)
+    const resume = () => {
+      const target = Math.max(-1, Math.min(1, (split - MIDP) / AMPL));
+      // continue on the leftward half of the cycle (revealing more of the graph), from exactly this position
+      let lo = Math.PI / 2, hi = (3 * Math.PI) / 2;
+      for (let i = 0; i < 24; i++) { const mid = (lo + hi) / 2; if (glide(mid) > target) lo = mid; else hi = mid; }
+      phase = (lo + hi) / 2; wait = 0; auto = !reduce; request();
+    };
+    // Mouse: the glide waits while the pointer is close to the divider, and you can drag from anywhere.
+    // Touch: nothing changes until the finger actually moves sideways, so scrolling past never stops or moves it.
+    let pending: { x: number; y: number; id: number } | null = null, near = false;
+    const close = (e: PointerEvent) => Math.abs(along(e) - split) < 0.09;   // the pointer is reaching for the divider
+    stage.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse' && !dragging && near) { near = false; resume(); } });
+    stage.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') { dragging = true; auto = false; grabAt = along(e); stage.setPointerCapture(e.pointerId); }
+      else pending = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    });
+    stage.addEventListener('pointermove', (e) => {
+      if (pending && e.pointerId === pending.id && Math.abs(e.clientX - pending.x) > 8 && Math.abs(e.clientX - pending.x) > Math.abs(e.clientY - pending.y)) {
+        dragging = true; auto = false; pending = null; grabAt = along(e); stage.setPointerCapture(e.pointerId);
+      }
+      if (dragging) { setFrom(e); return; }
+      if (e.pointerType !== 'mouse') return;
+      const c = close(e);
+      if (c && !near) { near = true; auto = false; } else if (!c && near) { near = false; resume(); }
+    });
+    const end = (e: PointerEvent) => {
+      pending = null;
+      if (!dragging) return;
+      dragging = false;
+      if (e.pointerType === 'mouse') { near = close(e); if (!near) resume(); }
+      else setTimeout(() => !dragging && resume(), 1200);
+    };
+    stage.addEventListener('pointerup', end); stage.addEventListener('pointercancel', end);
+
+    let rt = 0;
+    new ResizeObserver(() => { clearTimeout(rt); rt = window.setTimeout(resize, 150); }).observe(canvas);
+    new IntersectionObserver(([en]) => { visible = en.isIntersecting; if (visible) { last = performance.now(); request(); } }).observe(stage);
+    resize();
+    if (import.meta.env.DEV) { // test hooks for development only; stripped from the published build
+      (fig as any).__frame = (sp?: number) => { if (sp !== undefined) { auto = false; split = sp; } frame(performance.now()); };
+      (fig as any).__sim = (seconds: number) => { let tm = last || performance.now(); for (let i = 0; i < seconds * 25; i++) frame((tm += 40)); };
+      (fig as any).__state = () => ({ split: +split.toFixed(3), auto, wait: +wait.toFixed(2), mode, mix: +mix.toFixed(2) });
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('.twoviews3d').forEach((fig) => {
+    whenShown(fig, () => init(fig));
+  });
+</script>
+
+<style>
+  .twoviews3d { margin: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; }
+  .stage { position: relative; min-height: 260px; touch-action: pan-y; cursor: ew-resize; }
+  .readout { font-variant-numeric: tabular-nums; color: #1d2521; }
+  .tv3-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  figcaption { font-size: 14px; line-height: 1.5; color: #5f6964; }
+  figcaption p { margin: 0; max-width: 78ch; }
+  @media (max-width: 860px) { .stage { min-height: 56vh; } }
+</style>

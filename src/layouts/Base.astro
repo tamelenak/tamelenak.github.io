@@ -1,0 +1,106 @@
+---
+// The page shell: <head> metadata (title, description, canonical, Open Graph, structured data), the font,
+// the favicon and, when switched on in site.ts, private GoatCounter visitor counts.
+import '@fontsource-variable/newsreader/opsz.css';
+import '@fontsource-variable/newsreader/opsz-italic.css';
+import fontUrl from '@fontsource-variable/newsreader/files/newsreader-latin-opsz-normal.woff2?url';
+import { getImage } from 'astro:assets';
+import portrait from '../assets/portrait.jpg';
+import { site, person, firstAuthor, links } from '../data/site';
+
+interface Props { title?: string; description?: string; noindex?: boolean }
+const { title = site.title, description = site.description, noindex = false } = Astro.props;
+const url = site.url;
+const og = new URL(site.ogImage, url).href;
+const photo = await getImage({ src: portrait, width: 600, format: 'jpg' });
+
+// One linked graph: the website, the profile page, the person, and her first-author work.
+const papers = firstAuthor.filter((r) => r.cite?.doi && !r.cite.doi.startsWith('10.5281/'));
+const software = firstAuthor.find((r) => r.cite?.doi?.startsWith('10.5281/'));
+const published: Record<string, string> = { '10.1093/neuonc/noag190': '2026-09-23', '10.1007/s00415-026-13884-0': '2026-07-27' };
+const graph = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    { '@type': 'WebSite', '@id': `${url}#website`, url, name: person.name, inLanguage: 'en', publisher: { '@id': `${url}#person` } },
+    {
+      '@type': 'ProfilePage', '@id': `${url}#webpage`, url, name: title, description, inLanguage: 'en',
+      isPartOf: { '@id': `${url}#website` }, mainEntity: { '@id': `${url}#person` }, primaryImageOfPage: { '@id': `${url}#ogimage` },
+    },
+    { '@type': 'ImageObject', '@id': `${url}#ogimage`, url: og, width: 1200, height: 675 },
+    {
+      '@type': 'Person', '@id': `${url}#person`, name: person.name, givenName: person.given, familyName: person.family, url,
+      image: new URL(photo.src, url).href, jobTitle: 'PhD candidate', description: site.personDescription,
+      affiliation: [
+        { '@type': 'ResearchOrganization', name: 'Paris Brain Institute (ICM)', url: 'https://parisbraininstitute.org/' },
+        { '@type': 'CollegeOrUniversity', name: 'École polytechnique', url: 'https://www.polytechnique.edu/' },
+        { '@type': 'CollegeOrUniversity', name: 'Sorbonne Université', url: 'https://www.sorbonne-universite.fr/' },
+      ],
+      alumniOf: { '@type': 'CollegeOrUniversity', name: 'ETH Zurich', url: 'https://ethz.ch/' },
+      knowsAbout: ['Primary central nervous system lymphoma', 'Plasma proteomics', 'Spatial proteomics', 'Machine learning', 'Digital pathology', 'Brain MRI'],
+      identifier: { '@type': 'PropertyValue', propertyID: 'ORCID', value: site.orcid },
+      sameAs: links.map((l) => l.href),
+    },
+    ...papers.map((r) => ({
+      '@type': 'ScholarlyArticle', '@id': `https://doi.org/${r.cite!.doi}`, headline: r.cite!.title, name: r.cite!.title,
+      author: { '@id': `${url}#person` }, isPartOf: { '@type': 'Periodical', name: r.cite!.venue },
+      datePublished: published[r.cite!.doi!] ?? r.cite!.year, url: `https://doi.org/${r.cite!.doi}`,
+    })),
+    ...(software ? [{
+      '@type': 'SoftwareSourceCode', '@id': `https://doi.org/${software.cite!.doi}`, name: 'QuRad',
+      description: 'Open-source QuPath extension for radiomic feature extraction from cell detections.',
+      codeRepository: 'https://github.com/icm-dac/QuRad', identifier: `https://doi.org/${software.cite!.doi}`, author: { '@id': `${url}#person` },
+    }] : []),
+  ],
+};
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex
+      ? <meta name="robots" content="noindex" />
+      : <>
+          <link rel="canonical" href={url} />
+          <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+        </>}
+    <meta property="og:type" content="profile" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={url} />
+    <meta property="og:image" content={og} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="675" />
+    <meta property="og:image:alt" content="Tamara Künzle, beside a tilted microscope slide whose cell graph rises off the glass." />
+    <meta property="og:site_name" content={person.name} />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="profile:first_name" content={person.given} />
+    <meta property="profile:last_name" content={person.family} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#eceeea" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preload" href={fontUrl} as="font" type="font/woff2" crossorigin />
+    <link rel="sitemap" href="/sitemap.xml" />
+    {!noindex && <script type="application/ld+json" set:html={JSON.stringify(graph)} />}
+    {site.goatcounter && <script data-goatcounter={`https://${site.goatcounter}.goatcounter.com/count`} async src="https://gc.zgo.at/count.js"></script>}
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <slot />
+  </body>
+</html>
+
+<style is:global>
+  html { background: #eceeea; -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: #eceeea; color: #1d2521; }
+  ::selection { background: #e3a3bf; color: #1d2521; }
+  .skip {
+    position: absolute; left: 12px; top: -48px; z-index: 10; padding: 8px 12px; border-radius: 3px;
+    background: #1d2521; color: #eceeea; font: 14px/1.4 'Newsreader Variable', Georgia, serif; text-decoration: none;
+  }
+  .skip:focus { top: 12px; }
+</style>

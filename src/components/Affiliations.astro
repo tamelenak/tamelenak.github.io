@@ -1,0 +1,37 @@
+---
+// affiliation logos, rendered as masks so they take the surrounding text colour.
+// Pass `colour` to show the original brand colours instead.
+interface Props { colour?: boolean; size?: number; align?: 'start' | 'center' }
+const { colour = false, size = 30, align = 'start' } = Astro.props;
+const logos = [
+  { name: 'Paris Brain Institute (ICM)', href: 'https://parisbraininstitute.org/', src: '/logos/icm.png', ratio: 988 / 282, h: 0.86 },
+  { name: 'Sorbonne Université', href: 'https://www.sorbonne-universite.fr/', src: '/logos/sorbonne.svg', ratio: 190.3 / 77, h: 1.08 },
+  { name: 'École polytechnique, IP Paris', href: 'https://www.polytechnique.edu/', src: '/logos/polytechnique.svg', ratio: 244.998 / 89.164, h: 1.12 },
+];
+---
+
+<ul class="aff" aria-label="Affiliations" style={`--size:${size}px;justify-content:${align}`}>
+  {logos.map((l) => (
+    <li>
+      <a href={l.href} aria-label={l.name} title={l.name}>
+        {colour
+          ? <img src={l.src} alt="" style={`height:calc(var(--size) * ${l.h})`} />
+          : <span class="mask" style={`-webkit-mask-image:url(${l.src});mask-image:url(${l.src});height:calc(var(--size) * ${l.h});aspect-ratio:${l.ratio}`}></span>}
+      </a>
+    </li>
+  ))}
+</ul>
+
+<style>
+  .aff { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; }
+  .aff a { display: block; color: inherit; opacity: 0.82; transition: opacity 0.2s; }
+  .aff a:hover { opacity: 1; }
+  .aff a:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+  .mask {
+    display: block; background: currentColor;
+    -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+    -webkit-mask-size: contain; mask-size: contain;
+    -webkit-mask-position: left center; mask-position: left center;
+  }
+  img { display: block; width: auto; }
+</style>

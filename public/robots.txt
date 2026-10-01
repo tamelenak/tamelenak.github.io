@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+# Search and AI answers may use this site; training AI models on it is not allowed.
+Content-Signal: search=yes, ai-input=yes, ai-train=no
+
+Sitemap: https://tamelenak.github.io/sitemap.xml

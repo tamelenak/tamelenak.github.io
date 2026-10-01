@@ -1,0 +1,19 @@
+{
+  "name": "tamara-kuenzle-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "tissue": "python3 scripts/make_tissue.py && python3 scripts/make_recon.py"
+  },
+  "dependencies": {
+    "@fontsource-variable/newsreader": "^5.3.0",
+    "astro": "^7.3.5",
+    "d3-delaunay": "^6.0.4"
+  },
+  "devDependencies": {
+    "axe-core": "^4.13.0"
+  }
+}

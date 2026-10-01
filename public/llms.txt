@@ -1,0 +1,13 @@
+# Tamara Künzle
+
+> PhD candidate at the Paris Brain Institute (ICM) and École Polytechnique, Sorbonne Université (MSCA COFUND fellow, SOUND.AI). She applies machine learning and spatial analysis to brain tumors, mostly primary CNS lymphoma: plasma proteomics, multiplex tissue imaging and MRI.
+
+- [Homepage](https://tamelenak.github.io/): research, first-author publications, other work, CV and contact.
+- [ORCID](https://orcid.org/0009-0005-7663-6819)
+- [GitHub](https://github.com/tamelenak)
+
+## First-author publications
+
+- Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma. Neuro-Oncology, 2026. https://doi.org/10.1093/neuonc/noag190
+- Spatial analysis of paraneoplastic cerebellar degeneration in ovarian cancer with anti-Yo syndrome and SCA1. Journal of Neurology, 2026. https://doi.org/10.1007/s00415-026-13884-0
+- QuRad: radiomic feature extraction from cell detections in QuPath. Computational and Structural Biotechnology Journal, under revision. Software: https://doi.org/10.5281/zenodo.20628111

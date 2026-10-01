@@ -1,0 +1,21 @@
+---
+// Shown for any address that does not exist (GitHub Pages serves it with a 404 status).
+import Base from '../layouts/Base.astro';
+import { person } from '../data/site';
+---
+
+<Base title={`Page not found – ${person.name}`} description="This page does not exist. The homepage has everything: research, publications, CV and contact." noindex>
+  <main id="main" class="nf">
+    <p class="name">{person.name}</p>
+    <h1>This page doesn’t exist.</h1>
+    <p><a href="/">Go to the homepage</a></p>
+  </main>
+</Base>
+
+<style>
+  .nf { max-width: 40ch; margin: 18vh auto 0; padding: 0 24px; font: 400 17px/1.6 'Newsreader Variable', Georgia, serif; }
+  .name { margin: 0 0 6px; font-size: 14px; font-style: italic; color: #5f6964; }
+  h1 { margin: 0 0 18px; font-weight: 400; font-size: 28px; line-height: 1.2; }
+  a { color: #3b3a82; text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid #3b3a82; outline-offset: 3px; }
+</style>

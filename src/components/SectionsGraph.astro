@@ -1,0 +1,213 @@
+---
+// "Serial sections to 3D" figure. Five serial multiplex-immunofluorescence sections of one synthetic
+// lymphoma (simulated images from scripts/make_recon.py, no vessels) float apart, then close up.
+// As they meet, the images fade and geometry takes over. Three endings to compare:
+//   graph  the cells of all sections joined into one 3D cell graph
+//   mesh   each tumour island lofted into a 3D surface
+//   modes  the 3D graph coloured by its Laplacian eigenmodes
+// Runs by itself in a slow loop and sways gently throughout; hovering does not stop it.
+// Drag sideways to turn it; with a mouse, up or down also pulls the sections apart or together.
+// The loop picks up again a moment after you let go.
+interface Props { end: 'graph' | 'mesh' | 'modes' }
+const { end } = Astro.props;
+const MARKERS = [
+  { label: 'PAX5, lymphoma cells', css: '#e8844f' },
+  { label: 'CD3, T cells', css: '#f2d53c' },
+  { label: 'CD163, macrophages', css: '#e23bc4' },
+  { label: 'DAPI, other nuclei', css: '#4a3fe0' },
+];
+const CAPTION = {
+  graph: 'Five serial multiplex sections of a synthetic lymphoma, joined into one 3D cell graph.',
+  mesh: 'Five serial multiplex sections of a synthetic lymphoma, rebuilt as 3D shapes: each tumour island becomes a surface.',
+  modes: 'Five serial multiplex sections of a synthetic lymphoma, joined into a 3D cell graph and coloured by its vibration modes.',
+}[end];
+---
+
+<figure class="recon" data-end={end}>
+  <div class="stage">
+    <canvas class="rc-canvas" role="img" aria-label="Five thin, multi-coloured tissue sections float in a stack, then close up and turn into a three-dimensional geometric reconstruction of the tumour."></canvas>
+  </div>
+  <figcaption>
+    <p>{CAPTION}</p>
+    <ul class="legend">{MARKERS.map((m) => <li><i style={`--c:${m.css}`}></i>{m.label}</li>)}</ul>
+  </figcaption>
+</figure>
+
+<script>
+  import { ctx2d, whenShown, hiDPI, diverging, motionPaused, onMotionChange } from '../lib/tissue';
+
+  type Recon = {
+    W: number; H: number; N: number; DZ: number; slides: string[];
+    contours: ([number, number][] | null)[][]; nodes: [number, number, number, number][]; edges: [number, number][];
+    modes: number[][]; eigenvalues: number[];
+  };
+  // node colours echo the stains, softened for the paper background
+  const NODE = ['#d98468', '#d2b23e', '#c25aac', '#7078c9'];
+
+  let data: Promise<{ r: Recon; imgs: HTMLImageElement[] }> | null = null;
+  const load = () => (data ??= fetch('/recon/recon.json').then((x) => x.json()).then(async (r: Recon) => {
+    const imgs = await Promise.all(r.slides.map((src) => new Promise<HTMLImageElement>((ok) => { const im = new Image(); im.onload = () => ok(im); im.src = src; })));
+    return { r, imgs };
+  }));
+
+  async function init(fig: HTMLElement) {
+    const { r, imgs } = await load();
+    const end = fig.dataset.end as 'graph' | 'mesh' | 'modes';
+    const canvas = fig.querySelector<HTMLCanvasElement>('.rc-canvas')!;
+    const stage = fig.querySelector<HTMLElement>('.stage')!;
+    const ctx = ctx2d(canvas);
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const { W: X, H: Y, N } = r;
+    const KY = 0.45, KZ = 0.85, YAW0 = -0.46, GMIN = r.DZ, GMAX = 215;
+
+    // edges grouped by the upper section they touch, so everything can be painted bottom to top
+    const byLevel: [number, number][][] = Array.from({ length: N }, () => []);
+    for (const [i, j] of r.edges) byLevel[Math.max(r.nodes[i][2], r.nodes[j][2])].push([i, j]);
+    const nodesAt: number[][] = Array.from({ length: N }, () => []);
+    r.nodes.forEach((n, i) => nodesAt[n[2]].push(i));
+    const modes = r.modes.map((m) => { const a = m.map(Math.abs).sort((p, q) => p - q), sc = Math.max(1, a[Math.floor(a.length * 0.92)]); return Float32Array.from(m, (v) => Math.max(-1, Math.min(1, v / sc))); });
+    const omega = r.eigenvalues.map((l) => ((Math.PI * 2) / 5.5) * Math.sqrt(l / r.eigenvalues[0]));
+
+    let w = 0, h = 0, dpr = 1, S = 1, cx = 0, cy = 0, cyw = 1, syw = 0;
+    let sep = reduce ? 0 : 1, rot = 0, clock = 0, auto = !reduce, dragging = false, visible = false, raf = 0, last = 0, lastP = { x: 0, y: 0 };
+    let mode = 0, mix = 0, modeClock = 0, time = 0, rotBias = 0;
+    const px = new Float32Array(r.nodes.length), py = new Float32Array(r.nodes.length);
+
+    const smooth = (a: number, b: number, v: number) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u); };
+    const P = (x: number, y: number, z: number): [number, number] => {
+      const u = x - X / 2, v = y - Y / 2;
+      return [cx + S * (u * cyw - v * syw), cy + S * (u * syw + v * cyw) * KY - S * z * KZ];
+    };
+    const LOOP = 19;
+    const sway = (c: number, sp: number) => Math.sin((c * Math.PI * 2) / 9.5) * (0.12 + 0.3 * (1 - sp));
+    const sepAt = (c: number) => { const p = (c % LOOP) / LOOP; return p < 0.17 ? 1 : p < 0.36 ? 1 - smooth(0.17, 0.36, p) : p < 0.82 ? 0 : smooth(0.82, 0.98, p); };
+
+    function frame(now: number) {
+      raf = 0;
+      const dt = motionPaused() ? 0 : Math.min(0.05, (now - last) / 1000 || 0); last = now;
+      // the loop opens and closes the stack; a slow sway keeps it alive during the holds, wider once it is assembled
+      if (auto && !dragging) { clock += dt; sep = sepAt(clock); rotBias *= Math.exp(-dt / 1.1); rot = sway(clock, sep) + rotBias; }
+      if (!reduce && end === 'modes') {
+        time += dt; modeClock += dt;
+        if (modeClock > 5) { const u = Math.min(1, (modeClock - 5) / 1.5); mix = u * u * (3 - 2 * u); if (u >= 1) { mode = (mode + 1) % modes.length; mix = 0; modeClock = 0; } }
+      }
+      const yaw = YAW0 + rot; cyw = Math.cos(yaw); syw = Math.sin(yaw);
+      const gap = GMIN + (GMAX - GMIN) * sep, zTop = (N - 1) * gap;
+      const bw = X * Math.abs(cyw) + Y * Math.abs(syw), bh = (X * Math.abs(syw) + Y * Math.abs(cyw)) * KY + zTop * KZ;
+      S = Math.min((w * 0.97) / bw, (h * 0.96) / bh);
+      cx = w / 2; cy = h / 2 + (zTop * KZ * S) / 2;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+
+      const imgA = smooth(0.16, 0.6, sep), geoA = 1 - smooth(0.3, 0.85, sep);
+      r.nodes.forEach((n, i) => { const q = P(n[0], n[1], n[2] * gap); px[i] = q[0]; py[i] = q[1]; });
+      const t = time, nxt = (mode + 1) % modes.length;
+      const val = (i: number) => (reduce ? modes[mode][i] : modes[mode][i] * Math.cos(omega[mode] * t) * (1 - mix) + modes[nxt][i] * Math.cos(omega[nxt] * t) * mix);
+
+      for (let k = 0; k < N; k++) {
+        const z = k * gap, o = P(0, 0, z);
+        // the section itself: the simulated microscope image, mapped onto its tilted plane
+        if (imgA > 0.01) {
+          ctx.save();
+          ctx.transform(S * cyw, S * syw * KY, -S * syw, S * cyw * KY, o[0], o[1]);
+          if (k === 0) { ctx.shadowColor = `rgba(29,37,33,${0.3 * imgA})`; ctx.shadowBlur = 30 * dpr; ctx.shadowOffsetY = 14 * dpr; }
+          ctx.globalAlpha = imgA; ctx.drawImage(imgs[k], 0, 0, X, Y);
+          ctx.restore();
+        }
+        if (geoA < 0.01) continue;
+        ctx.globalAlpha = geoA;
+        // a faint outline of where each section sits
+        const c = [P(0, 0, z), P(X, 0, z), P(X, Y, z), P(0, Y, z)];
+        ctx.beginPath(); c.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
+        ctx.strokeStyle = 'rgba(29,37,33,0.16)'; ctx.lineWidth = 0.8; ctx.stroke();
+
+        if (end === 'mesh') {
+          for (const isl of r.contours) {
+            const ring = isl[k]; if (!ring) continue;
+            const below = k > 0 ? isl[k - 1] : null, M = ring.length;
+            const cen = (rg: [number, number][]) => rg.reduce((a, p) => [a[0] + p[0] / rg.length, a[1] + p[1] / rg.length], [0, 0]);
+            // where an island begins or ends, close it with a rounded cap half a section further out
+            const cap = (rg: [number, number][], zz: number) => { const [mx, my] = cen(rg); return rg.map(([x, y]) => [mx + (x - mx) * 0.42, my + (y - my) * 0.42] as [number, number]).map(([x, y]) => P(x, y, zz)); };
+            const here = ring.map(([x, y]) => P(x, y, z));
+            const prev = below ? below.map(([x, y]) => P(x, y, z - gap)) : cap(ring, z - gap * 0.42);
+            const band = (a: [number, number][], b: [number, number][]) => {
+              ctx.fillStyle = 'rgba(217,132,104,0.2)';
+              for (let j = 0; j < M; j++) { const j2 = (j + 1) % M; ctx.beginPath(); ctx.moveTo(a[j][0], a[j][1]); ctx.lineTo(a[j2][0], a[j2][1]); ctx.lineTo(b[j2][0], b[j2][1]); ctx.lineTo(b[j][0], b[j][1]); ctx.closePath(); ctx.fill(); }
+              ctx.strokeStyle = 'rgba(59,58,130,0.34)'; ctx.lineWidth = 0.7; ctx.beginPath();
+              for (let j = 0; j < M; j += 2) { ctx.moveTo(a[j][0], a[j][1]); ctx.lineTo(b[j][0], b[j][1]); }
+              ctx.stroke();
+            };
+            const loop = (a: [number, number][], col: string, lw: number) => { ctx.beginPath(); a.forEach(([x, y], j) => (j ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.stroke(); };
+            band(prev, here);
+            if (!below) loop(prev, 'rgba(59,58,130,0.34)', 0.7);
+            loop(here, 'rgba(190,96,72,0.95)', 1.3);
+            if (k === N - 1 || !isl[k + 1]) { const top = cap(ring, z + gap * 0.42); band(here, top); loop(top, 'rgba(59,58,130,0.34)', 0.7); }
+          }
+          // the immune cells stay as points around the surfaces
+          for (const i of nodesAt[k]) { const ty = r.nodes[i][3]; if (ty === 0 || ty === 3) continue; ctx.beginPath(); ctx.arc(px[i], py[i], 2.1, 0, 7); ctx.fillStyle = NODE[ty]; ctx.fill(); }
+        } else {
+          ctx.strokeStyle = 'rgba(29,37,33,0.17)'; ctx.lineWidth = 0.6; ctx.beginPath();
+          for (const [i, j] of byLevel[k]) { ctx.moveTo(px[i], py[i]); ctx.lineTo(px[j], py[j]); }
+          ctx.stroke();
+          const R = Math.max(1.6, 3.6 * S + 0.8);
+          for (const i of nodesAt[k]) {
+            ctx.beginPath(); ctx.arc(px[i], py[i], r.nodes[i][3] === 3 && end === 'graph' ? R * 0.65 : R, 0, 7);
+            ctx.fillStyle = end === 'modes' ? diverging(val(i)) : NODE[r.nodes[i][3]]; ctx.fill();
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+      if (visible && !reduce && !motionPaused()) request();
+    }
+    const request = () => { if (!raf) raf = requestAnimationFrame(frame); };
+    onMotionChange(() => { last = performance.now(); request(); });
+    const resize = () => { ({ w, h, dpr } = hiDPI(canvas)); if (!w || !h) return; request(); };
+
+    // The loop only hands over while you are actually dragging; hovering no longer freezes it.
+    // Touch: nothing changes until the finger moves sideways, so scrolling past never stops it.
+    // Pick the loop up exactly where the figure was left: find the moment of the closing phase with this
+    // separation, and let the rotation ease back into the sway instead of snapping to it.
+    const resume = () => {
+      let pos = sep >= 0.999 ? 0.1 : sep <= 0.001 ? 0.5 : 0.265;
+      if (sep > 0.001 && sep < 0.999) { let lo = 0.17, hi = 0.36; for (let i = 0; i < 24; i++) { pos = (lo + hi) / 2; if (sepAt(pos * LOOP) > sep) lo = pos; else hi = pos; } }
+      clock = pos * LOOP; rotBias = rot - sway(clock, sep); auto = !reduce; request();
+    };
+    let pending: { x: number; y: number; id: number } | null = null, back = 0;
+    const grab = (e: PointerEvent) => { dragging = true; auto = false; clearTimeout(back); lastP = { x: e.clientX, y: e.clientY }; stage.setPointerCapture(e.pointerId); };
+    stage.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') grab(e); else pending = { x: e.clientX, y: e.clientY, id: e.pointerId }; });
+    stage.addEventListener('pointermove', (e) => {
+      if (pending && e.pointerId === pending.id && Math.abs(e.clientX - pending.x) > 8 && Math.abs(e.clientX - pending.x) > Math.abs(e.clientY - pending.y)) { pending = null; grab(e); }
+      if (!dragging) return;
+      rot = Math.max(-1.1, Math.min(1.1, rot + (e.clientX - lastP.x) * 0.008));
+      if (e.pointerType === 'mouse') sep = Math.min(1, Math.max(0, sep - (e.clientY - lastP.y) / 240));
+      lastP = { x: e.clientX, y: e.clientY }; request();
+    });
+    const stop = () => { pending = null; if (!dragging) return; dragging = false; back = window.setTimeout(() => !dragging && resume(), 1500); };
+    stage.addEventListener('pointerup', stop); stage.addEventListener('pointercancel', stop);
+
+    let rt = 0;
+    new ResizeObserver(() => { clearTimeout(rt); rt = window.setTimeout(resize, 150); }).observe(canvas);
+    new IntersectionObserver(([en]) => { visible = en.isIntersecting; if (visible) { last = performance.now(); request(); } }).observe(stage);
+    resize();
+    if (import.meta.env.DEV) { // test hooks for development only; stripped from the published build
+      (fig as any).__frame = (s?: number, ro?: number) => { if (s !== undefined) { auto = false; sep = s; rot = ro ?? 0; } frame(performance.now()); };
+      (fig as any).__sim = (seconds: number) => { let tm = last || performance.now(); for (let i = 0; i < seconds * 25; i++) frame((tm += 40)); };
+      (fig as any).__state = () => ({ sep: +sep.toFixed(3), rot: +rot.toFixed(3), auto });
+      (fig as any).__click = () => { dragging = true; auto = false; dragging = false; resume(); };
+      (fig as any).__auto = () => { auto = !reduce; };
+    }
+  }
+
+  document.querySelectorAll<HTMLElement>('.recon').forEach((fig) => whenShown(fig, () => init(fig)));
+</script>
+
+<style>
+  .recon { margin: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; }
+  .stage { position: relative; min-height: 280px; touch-action: pan-y; cursor: grab; }
+  .stage:active { cursor: grabbing; }
+  .rc-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  figcaption { font-size: 14px; line-height: 1.5; color: #5f6964; display: grid; gap: 4px; }
+  figcaption p { margin: 0; }
+  .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 16px; color: #1d2521; }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px rgb(29 37 33 / 0.3); }
+</style>
