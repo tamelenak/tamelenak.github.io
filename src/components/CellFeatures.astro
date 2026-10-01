@@ -1,0 +1,237 @@
+---
+// QuRad (prototype figure). A magnifier settles on one detected cell of an H&E field and measures it the way
+// QuRad does: its outline and axes (shape), the gray levels of its pixels (intensity), and how neighbouring
+// pixels relate (texture). Three rows of bars fill as each part is computed; their lengths are the real split
+// of QuRad's 103 default features (10 shape, 19 first order, 74 texture from five gray-level matrices). A second
+// cell goes faster, then every cell in the field is outlined. The slide is simulated (scripts/make_he.py) and
+// the feature values are synthetic; the gray levels in the magnifier are the slide's own pixels, binned as QuRad does.
+---
+
+<figure class="pfig qurad">
+  <div class="stage">
+    <canvas role="img" aria-label="A magnifier moves onto one nucleus of a simulated H&E slide, traces its outline and axes, turns it into gray-level pixels and links neighbouring pixels. Rows of bars fill for shape, intensity and texture features, 103 in all. Then every cell on the slide is outlined."></canvas>
+  </div>
+  <output class="readout">Each detected cell is measured on its own</output>
+</figure>
+
+<script>
+  import { start, ITALIC, MUTED, INK, HEMA, ROSE, ramp, lerp, clamp01, rgb, css, type Scene } from '../lib/figure';
+  import { mulberry32 } from '../lib/tissue';
+
+  // QuRad's default features (docs/features.md): 2D shape 10, first order 19, and texture 74 =
+  // GLCM 23 + GLRLM 16 + GLSZM 16 + NGTDM 5 + GLDM 14
+  const GROUPS = [
+    { name: 'shape', n: 10, parts: [10], colour: INK },
+    { name: 'intensity', n: 19, parts: [19], colour: HEMA },
+    { name: 'texture', n: 74, parts: [23, 16, 16, 5, 14], colour: ROSE },
+  ];
+  const LOOP = 12.5;
+  // when each cell's steps run: [start, end] in seconds
+  const STEPS = [
+    { shape: [0.9, 2.3], intensity: [2.3, 3.5], texture: [3.5, 5.3] },
+    { shape: [5.9, 6.5], intensity: [6.5, 7.0], texture: [7.0, 7.9] },
+  ];
+  const MOVE = [5.3, 5.9], OUT = [7.9, 8.5], SWEEP = [8.5, 9.9];
+
+  type HE = { x0: number; y0: number; side: number; k: number; nuclei: { c: [number, number]; type: number; p: [number, number][] }[] };
+  const G = 17; // magnifier pixel grid, across the lens
+
+  function scene(he: HE, img: HTMLImageElement): Scene {
+    // every nucleus of the simulated slide, as the detection outline QuPath would draw
+    const nuclei = he.nuclei.map((n) => {
+      const path = new Path2D(), q = n.p, m = (k: number) => [(q[k][0] + q[(k + 1) % q.length][0]) / 2, (q[k][1] + q[(k + 1) % q.length][1]) / 2];
+      let [mx, my] = m(q.length - 1); path.moveTo(mx, my);
+      for (let k = 0; k < q.length; k++) { [mx, my] = m(k); path.quadraticCurveTo(q[k][0], q[k][1], mx, my); }
+      path.closePath();
+      const rn = q.reduce((a, [x, y]) => a + Math.hypot(x - n.c[0], y - n.c[1]), 0) / q.length;
+      return { cx: n.c[0], cy: n.c[1], type: n.type, path, rn };
+    });
+    const rnd = mulberry32(103);
+    const bars = [0, 1].map(() => Array.from({ length: 103 }, () => 0.18 + 0.82 * rnd()));
+    let L: any = null;
+
+    function layout(w: number, h: number, dpr: number) {
+      const fw = w * 0.56;
+      let cw = 250, ch = (cw * h) / fw;
+      if (ch > he.side - 16) { ch = he.side - 16; cw = (ch * fw) / h; }
+      const cx0 = he.x0 + (he.side - cw) / 2, cy0 = he.y0 + (he.side - ch) / 2, s = fw / cw;
+      const ids = nuclei.map((_, i) => i).filter((i) => { const n = nuclei[i]; return n.cx > cx0 && n.cx < cx0 + cw && n.cy > cy0 && n.cy < cy0 + ch; });
+      const toX = (x: number) => (x - cx0) * s, toY = (y: number) => (y - cy0) * s;
+      // the two cells measured: lymphoma nuclei of ordinary size near two spots of the field
+      const sizes = ids.filter((i) => nuclei[i].type === 0).map((i) => nuclei[i].rn).sort((a, b) => a - b);
+      const lo = sizes[Math.floor(sizes.length * 0.45)], hi = sizes[Math.floor(sizes.length * 0.85)];
+      const pickNear = (fx: number, fy: number, not = -1) => ids.filter((i) => nuclei[i].type === 0 && i !== not && nuclei[i].rn >= lo && nuclei[i].rn <= hi)
+        .sort((a, b) => Math.hypot(toX(nuclei[a].cx) - fx * fw, toY(nuclei[a].cy) - fy * h) - Math.hypot(toX(nuclei[b].cx) - fx * fw, toY(nuclei[b].cy) - fy * h))[0];
+      const A = pickNear(0.34, 0.42), B = pickNear(0.68, 0.6, A);
+      const RL = Math.min(h * 0.43, fw * 0.36);
+      // each measured cell: the magnified view (the slide's own pixels), its mask, and its gray levels
+      const cells = [A, B].map((id) => {
+        const n = nuclei[id], Z = RL / (2.1 * n.rn), half = RL / Z;
+        const src = [(n.cx - half - he.x0) * he.k, (n.cy - half - he.y0) * he.k, 2 * half * he.k, 2 * half * he.k] as const;
+        const lens = document.createElement('canvas'); lens.width = lens.height = Math.round(2 * RL * dpr);
+        const lc = lens.getContext('2d')!; lc.imageSmoothingQuality = 'high'; lc.drawImage(img, ...src, 0, 0, lens.width, lens.height);
+        const S = Math.ceil(2 * RL), m = document.createElement('canvas'); m.width = m.height = S;
+        const mc = m.getContext('2d', { willReadFrequently: true })!;
+        mc.drawImage(img, ...src, 0, 0, S, S);
+        const rgbData = mc.getImageData(0, 0, S, S).data.slice();
+        mc.clearRect(0, 0, S, S); mc.setTransform(Z, 0, 0, Z, RL - n.cx * Z, RL - n.cy * Z); mc.fill(n.path);
+        const mask = mc.getImageData(0, 0, S, S).data;
+        // gray levels as QuRad bins them: 8-bit gray, bin width 25
+        const P = (2 * RL) / G, px: { i: number; j: number; gray: number }[] = [];
+        for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
+          const mx = Math.floor((i + 0.5) * P), my = Math.floor((j + 0.5) * P);
+          if (mask[(my * S + mx) * 4 + 3] < 128) continue;
+          let sum = 0, cnt = 0;
+          for (let yy = Math.floor(j * P); yy < Math.floor((j + 1) * P); yy++) for (let xx = Math.floor(i * P); xx < Math.floor((i + 1) * P); xx++) {
+            const o = (yy * S + xx) * 4; sum += 0.299 * rgbData[o] + 0.587 * rgbData[o + 1] + 0.114 * rgbData[o + 2]; cnt++;
+          }
+          px.push({ i, j, gray: Math.floor(sum / cnt / 25) * 25 + 12 });
+        }
+        // major and minor axes as PyRadiomics defines them: 4·sqrt of the eigenvalues of the mask's covariance
+        let c0 = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+        for (let yy = 0; yy < S; yy++) for (let xx = 0; xx < S; xx++) if (mask[(yy * S + xx) * 4 + 3] >= 128) {
+          const tx = n.cx + (xx + 0.5 - RL) / Z, ty = n.cy + (yy + 0.5 - RL) / Z; c0++; sx += tx; sy += ty; sxx += tx * tx; syy += ty * ty; sxy += tx * ty;
+        }
+        const mxx = sx / c0, myy = sy / c0, cxx = sxx / c0 - mxx * mxx, cyy = syy / c0 - myy * myy, cxy = sxy / c0 - mxx * myy;
+        const tr = (cxx + cyy) / 2, dd = Math.sqrt(((cxx - cyy) / 2) ** 2 + cxy * cxy), l1 = tr + dd, l2 = Math.max(0, tr - dd);
+        const axes = { cx: mxx, cy: myy, a: 0.5 * Math.atan2(2 * cxy, cxx - cyy), major: 2 * Math.sqrt(l1), minor: 2 * Math.sqrt(l2) };
+        return { id, x: n.cx, y: n.cy, rn: n.rn, Z, lens, px, P, axes, fx: toX(n.cx), fy: toY(n.cy) };
+      });
+      const lensAt = (c: { fx: number; fy: number }) => ({ x: Math.max(RL + 2, Math.min(fw - RL - 2, c.fx)), y: Math.max(RL + 2, Math.min(h - RL - 2, c.fy)) });
+      const mx = fw + 16, mw = w - mx - 2, gap = 2, pitch = (mw - gap * 4) / 74;
+      L = { fw, h, s, cx0, cy0, cw, ch, ids, toX, toY, cells, RL, lensAt, mx, mw, gap, pitch };
+    }
+
+    return {
+      still: 7.95,
+      resize(w, h, dpr) { layout(w, h, dpr); },
+      draw(ctx, w, h, T) {
+        if (!L) layout(w, h, Math.min(2, devicePixelRatio || 1));
+        const u = T % LOOP, fade = 1 - clamp01((u - 11.6) / 0.8);
+        ctx.globalAlpha = fade;
+        ctx.drawImage(img, (L.cx0 - he.x0) * he.k, (L.cy0 - he.y0) * he.k, L.cw * he.k, L.ch * he.k, 0, 0, L.fw, L.h);
+
+        // outlines on the field: each measured cell, then every cell in a sweep from the middle
+        const sweep = ramp(u, SWEEP[0], SWEEP[1]) * Math.hypot(L.fw, L.h) * 0.62;
+        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, L.fw, L.h); ctx.clip();
+        ctx.translate(-L.cx0 * L.s, -L.cy0 * L.s); ctx.scale(L.s, L.s); ctx.lineWidth = 1.1 / L.s;
+        for (const id of L.ids) {
+          const done = (id === L.cells[0].id && u > STEPS[0].texture[1]) || (id === L.cells[1].id && u > STEPS[1].texture[1]);
+          const d = Math.hypot(L.toX(nuclei[id].cx) - L.fw / 2, L.toY(nuclei[id].cy) - L.h / 2);
+          const a = done ? 1 : clamp01((sweep - d) / 12);
+          if (a <= 0) continue;
+          ctx.strokeStyle = `rgba(29,37,33,${(0.62 * a).toFixed(3)})`; ctx.stroke(nuclei[id].path);
+        }
+        ctx.restore();
+
+        // the magnifier: which cell, where, and how open
+        const k = u < MOVE[0] ? 0 : u < MOVE[1] ? -1 : 1;
+        const open = ramp(u, 0, 0.9) * (1 - ramp(u, OUT[0], OUT[1]));
+        const pa = L.lensAt(L.cells[0]), pb = L.lensAt(L.cells[1]), mv = ramp(u, MOVE[0], MOVE[1]);
+        const lx = lerp(pa.x, pb.x, mv), ly = lerp(pa.y, pb.y, mv), R = L.RL * (0.25 + 0.75 * open);
+        if (open > 0.01) {
+          ctx.save(); ctx.globalAlpha = fade * clamp01(open * 1.5);
+          ctx.beginPath(); ctx.arc(lx, ly, R, 0, 7); ctx.clip();
+          ctx.fillStyle = '#eceeea'; ctx.fillRect(lx - R, ly - R, 2 * R, 2 * R);
+          const drawCell = (c: any, ci: number, alpha: number) => {
+            if (alpha <= 0) return;
+            const st = STEPS[ci], sc = R / L.RL;
+            ctx.save(); ctx.globalAlpha = fade * alpha * clamp01(open * 1.5);
+            ctx.translate(lx, ly); ctx.scale(sc, sc); ctx.translate(-L.RL, -L.RL);
+            ctx.drawImage(c.lens, 0, 0, 2 * L.RL, 2 * L.RL);
+            // intensity: the cell becomes pixels, each at its binned gray level
+            const pi = ramp(u, st.intensity[0], st.intensity[1]);
+            if (pi > 0) for (const p of c.px) {
+              const a = clamp01(pi * 1.6 - (p.i / G) * 0.6);
+              if (a <= 0) continue;
+              ctx.fillStyle = css([p.gray, p.gray, p.gray], a);
+              ctx.fillRect(p.i * c.P + 0.5, p.j * c.P + 0.5, c.P - 1, c.P - 1);
+            }
+            // texture: neighbouring pixel pairs, compared one after another
+            const ptx = (u - st.texture[0]) / (st.texture[1] - st.texture[0]);
+            if (ptx > 0 && ptx < 1.15) {
+              const cur = Math.floor(clamp01(ptx) * c.px.length);
+              ctx.strokeStyle = ROSE; ctx.lineWidth = 1.6;
+              for (let q = Math.max(0, cur - 7); q <= Math.min(c.px.length - 1, cur); q++) {
+                const p = c.px[q], nb = c.px.find((o: any) => o.i === p.i + 1 && o.j === p.j) ?? c.px.find((o: any) => o.i === p.i && o.j === p.j + 1);
+                if (!nb) continue;
+                ctx.globalAlpha = fade * alpha * (1 - (cur - q) / 8) * (ptx < 1 ? 1 : 1 - (ptx - 1) / 0.15);
+                ctx.strokeRect(p.i * c.P + 1, p.j * c.P + 1, c.P - 2, c.P - 2); ctx.strokeRect(nb.i * c.P + 1, nb.j * c.P + 1, c.P - 2, c.P - 2);
+                ctx.beginPath(); ctx.moveTo((p.i + 0.5) * c.P, (p.j + 0.5) * c.P); ctx.lineTo((nb.i + 0.5) * c.P, (nb.j + 0.5) * c.P); ctx.stroke();
+              }
+              ctx.globalAlpha = fade * alpha;
+            }
+            // shape: the outline traced, then the long and short axes
+            const ps = ramp(u, st.shape[0], st.shape[0] + (st.shape[1] - st.shape[0]) * 0.65), pax = ramp(u, st.shape[0] + (st.shape[1] - st.shape[0]) * 0.55, st.shape[1]);
+            ctx.save(); ctx.translate(L.RL - c.x * c.Z, L.RL - c.y * c.Z); ctx.scale(c.Z, c.Z);
+            const per = 2 * Math.PI * c.rn * 1.15;
+            ctx.strokeStyle = INK; ctx.lineWidth = 2.2 / c.Z; ctx.setLineDash([per * ps, per * 2]);
+            if (ps > 0) ctx.stroke(nuclei[c.id].path);
+            ctx.setLineDash([]);
+            if (pax > 0) {
+              ctx.lineWidth = 1.4 / c.Z;
+              const A = c.axes, ax = (a: number, half: number) => {
+                const dx = Math.cos(a) * half * pax, dy = Math.sin(a) * half * pax;
+                ctx.beginPath(); ctx.moveTo(A.cx - dx, A.cy - dy); ctx.lineTo(A.cx + dx, A.cy + dy); ctx.stroke();
+              };
+              ax(A.a, A.major); ax(A.a + Math.PI / 2, A.minor);
+            }
+            ctx.restore();
+            ctx.restore();
+          };
+          drawCell(L.cells[0], 0, k === 1 ? 0 : 1 - mv);
+          drawCell(L.cells[1], 1, k === 0 ? 0 : mv);
+          ctx.restore();
+          ctx.globalAlpha = fade * clamp01(open * 1.5);
+          ctx.strokeStyle = INK; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(lx, ly, R, 0, 7); ctx.stroke();
+        }
+        ctx.globalAlpha = fade;
+
+        // the three rows of features: bar lengths are the real split of the 103
+        const ci = u < MOVE[0] ? 0 : 1, st = STEPS[ci];
+        const rowH = 15, block = 44, y0 = (L.h - block * 3) / 2 + 14;
+        let f0 = 0;
+        GROUPS.forEach((g, gi) => {
+          const [a, b] = st[g.name as 'shape' | 'intensity' | 'texture'], p = u < MOVE[1] && ci === 1 ? 0 : ramp(u, a, b);
+          const active = u >= a && u < b + 0.2, y = y0 + gi * block;
+          ctx.font = ITALIC; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+          ctx.fillStyle = active ? INK : MUTED; ctx.fillText(`${g.name}, ${g.n}`, L.mx, y);
+          let x = L.mx, n = 0;
+          g.parts.forEach((part) => {
+            for (let q = 0; q < part; q++, n++) {
+              const shown = clamp01(p * g.n - n);
+              const hgt = bars[ci][f0 + n] * rowH * shown;
+              ctx.fillStyle = css(rgb(g.colour), 0.82);
+              if (hgt > 0) ctx.fillRect(x, y + 6 + rowH - hgt, Math.max(0.8, L.pitch - 0.6), hgt);
+              ctx.fillStyle = 'rgba(29,37,33,0.12)'; ctx.fillRect(x, y + 6 + rowH, Math.max(0.8, L.pitch - 0.6), 1);
+              x += L.pitch;
+            }
+            x += L.gap;
+          });
+          f0 += g.n;
+        });
+        ctx.globalAlpha = 1;
+
+        if (u < STEPS[0].shape[0]) return 'Each detected cell is measured on its own';
+        if (u < STEPS[0].intensity[0]) return 'Shape: area, perimeter, axes, roundness';
+        if (u < STEPS[0].texture[0]) return 'Intensity: statistics of the pixels inside the cell';
+        if (u < MOVE[0]) return 'Texture: how neighbouring pixels relate, five ways';
+        if (u < SWEEP[0]) return '103 features per cell, as defined in PyRadiomics';
+        return 'Then the same for every cell on the slide';
+      },
+    };
+  }
+
+  const loadImage = (src: string) => new Promise<HTMLImageElement>((ok) => { const im = new Image(); im.onload = () => ok(im); im.src = src; });
+  start('.qurad', async () => {
+    const [he, img] = await Promise.all([fetch('/qurad/he.json').then((r) => r.json() as Promise<HE>), loadImage('/qurad/he.webp')]);
+    return scene(he, img);
+  });
+</script>
+
+<style>
+  .pfig { margin: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+  .stage { position: relative; min-height: 200px; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+  .readout { display: block; font-size: 14px; line-height: 1.5; min-height: 3em; color: #5f6964; }
+</style>

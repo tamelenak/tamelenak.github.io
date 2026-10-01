@@ -1,16 +1,27 @@
 ---
 // The homepage. Four text sizes only: name 36px, hero intro 20px, body 17px, small 14px.
 // Compact hero: text first (name, intro, logos, latest) with the 3D slide figure beside it.
-// Below, full-width sections: the cell map sits right of the first-author publications and the serial-sections
-// figure left of "Other work", each exactly as tall as the text beside it.
+// Below, full-width sections on one two-column grid. Each paper has its own figure beside it, exactly as tall as
+// its text: plasma states, the cerebellum, QuRad, the shared RNA–image space, and the serial sections.
 import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import Affiliations from '../components/Affiliations.astro';
 import SlideGraph from '../components/SlideGraph.astro';
-import CellMap from '../components/CellMap.astro';
+import PlasmaStates from '../components/PlasmaStates.astro';
+import Cerebellum from '../components/Cerebellum.astro';
+import CellFeatures from '../components/CellFeatures.astro';
+import CommonSpace from '../components/CommonSpace.astro';
 import SectionsGraph from '../components/SectionsGraph.astro';
 import portrait from '../assets/portrait.jpg';
-import { person, about, firstAuthor, otherWork, latest, cv, links } from '../data/site';
+import { person, about, firstAuthor, otherWork, research, latest, cv, links } from '../data/site';
+
+// which figure goes with which paper
+const FIG: Record<string, any> = { '10.1093/neuonc/noag190': PlasmaStates, '10.1007/s00415-026-13884-0': Cerebellum, '10.5281/zenodo.20628111': CellFeatures };
+// the two "Other work" items with a figure get a question and a plain-language line; the ongoing item reuses its research text
+const extra: Record<number, { question: string; answer: string; fig: any }> = {
+  0: { question: 'Can we tell every cell’s type in a tissue image without labelling any by hand?', answer: 'We match the cells of a multiplex image to a labelled single-cell RNA atlas, even though the two share only a few markers, and let the cell graph correct labels that disagree with their neighbours.', fig: CommonSpace },
+  3: { question: otherWork[3].question!, answer: research[1].answer, fig: SectionsGraph },
+};
 
 const bold = (s: string) => s.replace(/Künzle T\.?/, (m) => `<b>${m}</b>`);
 const year = new Date().getFullYear();
@@ -45,46 +56,67 @@ const year = new Date().getFullYear();
 
       <div class="catalogue">
         <section id="about" class="row" aria-labelledby="about-h">
-          <h2 id="about-h">About</h2>
-          <div class="body about">
+          <div class="label">
+            <h2 id="about-h">About</h2>
             <Image class="portrait" src={portrait} widths={[132, 264, 396]} sizes="132px" alt="Tamara Künzle smiling in a garden full of pink flowers" />
-            <div class="about-text" style={`--fa:${about[0].length}fr;--fb:${about[1].length}fr`}>{about.map((p) => <p>{p}</p>)}</div>
           </div>
+          <div class="body about-text">{about.map((p) => <p>{p}</p>)}</div>
         </section>
 
         <section id="publications" class="row" aria-labelledby="publications-h">
           <h2 id="publications-h">First-author publications</h2>
-          <div class="body research">
-            <div class="qs">
-              {firstAuthor.map((r) => (
-                <article class="q">
-                  <h3>{r.question}</h3>
-                  {r.cite && (
-                    <p class="cite">
-                      <span set:html={bold(r.cite.authors)} /> {r.cite.title}. <i>{r.cite.venue}</i>. {r.cite.year}{r.cite.note && `;${r.cite.note}`}.
-                      {r.cite.doi && <> <a href={`https://doi.org/${r.cite.doi}`}>doi:{r.cite.doi}</a></>}
-                      {r.links.filter((l) => ['Code', 'Documentation'].includes(l.label)).map((l) => <> <a href={l.href}>{l.label.toLowerCase()}</a></>)}
-                    </p>
-                  )}
+          <div class="body papers">
+            {firstAuthor.map((r) => {
+              const Fig = FIG[r.cite?.doi ?? ''];
+              return (
+                <article class="paper">
+                  <div class="text">
+                    <h3>{r.question}</h3>
+                    <p class="answer">{r.answer}</p>
+                    {r.cite && (
+                      <p class="cite">
+                        <span set:html={bold(r.cite.authors)} /> {r.cite.title}. <i>{r.cite.venue}</i>. {r.cite.year}{r.cite.note && `;${r.cite.note}`}.
+                        {r.cite.doi && <> <a href={`https://doi.org/${r.cite.doi}`}>doi:{r.cite.doi}</a></>}
+                        {r.links.filter((l) => ['Code', 'Documentation'].includes(l.label)).map((l) => <> <a href={l.href}>{l.label.toLowerCase()}</a></>)}
+                      </p>
+                    )}
+                  </div>
+                  <div class="fig">{Fig && <Fig />}</div>
                 </article>
-              ))}
-            </div>
-            <div class="aside"><CellMap /></div>
+              );
+            })}
           </div>
         </section>
 
         <section id="other" class="row" aria-labelledby="other-h">
           <h2 id="other-h">Other work</h2>
-          <div class="body other">
-            <div class="aside"><SectionsGraph end="graph" /></div>
-            <ul class="pubs">
-              {otherWork.map((o) => (
-                <li>
-                  {o.question && <h3>{o.question}</h3>}
-                  <span set:html={bold(o.authors)} /> {o.title}. <i>{o.venue}</i>. {o.year}.
-                  {o.doi && <> <a href={`https://doi.org/${o.doi}`}>doi:{o.doi}</a></>}
-                </li>
-              ))}
+          <div class="body papers">
+            {[0, 3].map((k) => {
+              const o = otherWork[k], x = extra[k];
+              return (
+                <article class="paper">
+                  <div class="text">
+                    <h3>{x.question}</h3>
+                    <p class="answer">{x.answer}</p>
+                    <p class="cite">
+                      <span set:html={bold(o.authors)} /> {o.title}. <i>{o.venue}</i>. {o.year}.
+                      {o.doi && <> <a href={`https://doi.org/${o.doi}`}>doi:{o.doi}</a></>}
+                    </p>
+                  </div>
+                  <div class="fig">{k === 3 ? <SectionsGraph end="graph" short /> : <x.fig />}</div>
+                </article>
+              );
+            })}
+            <ul class="paper plain">
+              {[1, 2].map((k) => {
+                const o = otherWork[k];
+                return (
+                  <li class="cite">
+                    <span set:html={bold(o.authors)} /> {o.title}. <i>{o.venue}</i>. {o.year}.
+                    {o.doi && <> <a href={`https://doi.org/${o.doi}`}>doi:{o.doi}</a></>}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </section>
@@ -105,7 +137,7 @@ const year = new Date().getFullYear();
     </main>
 
     <footer class="foot">
-      <p>© {year} {person.name}. The tissue in the figures is synthetic, drawn by code.</p>
+      <p>© {year} {person.name}. The figures are drawn by code from synthetic data. The cerebellum follows Gray’s Anatomy (Fig. 704) and uses the published lobule thicknesses and network sizes.</p>
     </footer>
   </div>
 </Base>
@@ -127,21 +159,25 @@ const year = new Date().getFullYear();
     const addr = `${a.dataset.u}@${a.dataset.d}`; a.href = `mailto:${addr}`; a.textContent = addr;
   });
 
-  // About: the two paragraphs sit side by side. Tune the column widths until both are the same height,
-  // so the columns end on the same line whatever the screen width.
+  // About: one paragraph per column, on the same grid as the sections below. If one paragraph runs a line
+  // shorter, its right edge (ragged anyway) is drawn in a little until both end on the same line; the left
+  // edges never move, so the columns stay aligned.
   const narrow = matchMedia('(max-width: 900px)');
   function balance(el: HTMLElement) {
-    const [a, b] = [...el.querySelectorAll<HTMLElement>('p')];
-    if (!a || !b || !el.offsetWidth) return;
-    if (narrow.matches) { el.style.gridTemplateColumns = ''; return; }
-    let lo = 0.3, hi = 0.7;
-    for (let i = 0; i < 16; i++) {
-      const f = (lo + hi) / 2;
-      el.style.gridTemplateColumns = `minmax(0, ${f}fr) minmax(0, ${1 - f}fr)`;
-      const d = a.offsetHeight - b.offsetHeight;
-      if (Math.abs(d) < 2) break;
-      if (d > 0) lo = f; else hi = f;
+    const ps = [...el.querySelectorAll<HTMLElement>('p')];
+    if (ps.length < 2 || !el.offsetWidth) return;
+    ps.forEach((p) => (p.style.maxWidth = ''));
+    if (narrow.matches) return;
+    const [a, b] = ps, short = a.offsetHeight < b.offsetHeight ? a : b, tall = short === a ? b : a;
+    if (Math.abs(a.offsetHeight - b.offsetHeight) < 2) return;
+    const full = short.offsetWidth;
+    let lo = full * 0.72, hi = full;
+    for (let i = 0; i < 14; i++) {
+      const w = (lo + hi) / 2; short.style.maxWidth = `${w}px`;
+      if (short.offsetHeight < tall.offsetHeight - 1) hi = w; else lo = w;
     }
+    short.style.maxWidth = `${lo}px`;
+    if (short.offsetHeight > tall.offsetHeight + 1) short.style.maxWidth = '';
   }
   const blocks = [...document.querySelectorAll<HTMLElement>('.about-text')];
   const run = () => blocks.forEach(balance);
@@ -152,7 +188,7 @@ const year = new Date().getFullYear();
 <style>
   .page {
     --paper: #eceeea; --ink: #1d2521; --muted: #5f6964; --hema: #3b3a82; --rule: #d3d8d2;
-    --small: 14px; --pad: clamp(20px, 3.2vw, 48px);
+    --small: 14px; --pad: clamp(20px, 3.2vw, 48px); --colgap: 48px;
     background: var(--paper); color: var(--ink);
     font: 400 17px/1.6 'Newsreader Variable', Georgia, serif; font-optical-sizing: auto;
     position: relative;
@@ -189,11 +225,11 @@ const year = new Date().getFullYear();
 
   .catalogue { padding: 0 var(--pad) 96px; }
   .row { display: grid; grid-template-columns: minmax(130px, 15%) minmax(0, 1fr); gap: 24px; padding: 48px 0; border-top: 1px solid var(--rule); scroll-margin-top: 12px; }
-  .row > h2 { font-size: var(--small); font-weight: 400; font-style: italic; color: var(--muted); line-height: 1.9; }
-  .about { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 32px; align-items: start; }
-  .about :global(.portrait) { width: 100%; height: auto; display: block; }
+  .row > h2, .row > .label h2 { font-size: var(--small); font-weight: 400; font-style: italic; color: var(--muted); line-height: 1.9; }
+  .row > .label { display: grid; gap: 14px; align-content: start; }
+  .label :global(.portrait) { width: 132px; height: auto; display: block; }
   /* one paragraph per column; widths start in proportion to the text lengths and the script evens the heights */
-  .about-text { display: grid; grid-template-columns: minmax(0, var(--fa, 1fr)) minmax(0, var(--fb, 1fr)); gap: 48px; align-items: start; }
+  .about-text { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--colgap); align-items: start; }
 
   .research { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr); gap: 40px; align-items: stretch; }
   .research .q:last-child { margin-bottom: 0; }
@@ -208,8 +244,25 @@ const year = new Date().getFullYear();
   .aside :global(.stage) { min-height: 0; }
 
   .pubs { display: grid; gap: 16px; align-content: start; }
+  /* One row per paper: the text, and its figure beside it. The text sets the row's height and the figure,
+     caption included, fills exactly that height (it is laid out absolutely, so it adds none of its own). */
+  .papers { display: grid; gap: 44px; }
+  /* Two equal columns, on the same grid as About and the CV, so the second column starts at the same place in
+     every section. The text sets the row's height and the figure, caption included, fills exactly that height. */
+  .paper { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--colgap); align-items: stretch; }
+
+  /* the talk and the preprint have no figure: they share one row, in the same two columns */
+  .paper.plain { list-style: none; margin: 0; padding: 0; }
+  .paper h3 { font-size: inherit; font-weight: 600; line-height: 1.4; margin-bottom: 4px; }
+  .answer { margin-bottom: 6px; }
+  .fig { position: relative; min-height: 0; }
+  .fig > :global(figure) { position: absolute; inset: 0; height: auto; }
+  .fig :global(.stage) { min-height: 0; }
+  .fig :global(.readout) { min-height: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* the serial-sections figure keeps its marker legend but not its sentence, so it fits the same frame */
+  .fig :global(.recon figcaption p) { display: none; }
   /* grids rather than CSS columns, so rows line up across the two columns */
-  .cv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), auto); grid-auto-flow: column; gap: 14px 56px; }
+  .cv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), auto); grid-auto-flow: column; gap: 14px var(--colgap); }
   .cv li { display: grid; grid-template-columns: 104px 1fr; gap: 14px; }
   .cv b { font-weight: 600; }
   .contact { display: flex; flex-wrap: wrap; gap: 8px 28px; }
@@ -225,10 +278,13 @@ const year = new Date().getFullYear();
     .hero-visual :global(.stage) { aspect-ratio: 3 / 2; min-height: 0; }
     .catalogue { padding-bottom: 64px; }
     .row { grid-template-columns: 1fr; gap: 12px; padding: 36px 0; }
-    .about { grid-template-columns: 1fr; }
     .about-text { grid-template-columns: 1fr !important; gap: 1em; }
-    .about :global(.portrait) { width: 132px; }
     .research, .other { grid-template-columns: 1fr; }
+    .paper { grid-template-columns: 1fr; gap: 16px; }
+    .paper.plain { gap: 16px; }
+    .fig > :global(figure) { position: static; }
+    .fig :global(.stage) { aspect-ratio: 16 / 10; }
+    .fig :global(.readout) { white-space: normal; min-height: 3em; }
     .aside { min-height: 0; }
     .aside > :global(figure) { position: static; }
     .aside :global(.stage) { aspect-ratio: 1 / 1; }

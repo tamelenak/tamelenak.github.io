@@ -1,0 +1,305 @@
+---
+// Journal of Neurology paper (prototype figure). A sagittal section of the cerebellum, front to the left:
+// the white-matter core sends branches into each lobule (the arbor vitae), the cortex covers every folium, and
+// the fissures between folia are dark, as on MRI. The outline and the order and extent of the lobules
+// follow Gray's Anatomy Fig. 704 (sagittal section near the vermis, public domain, mirrored); the branching
+// inside is drawn by code, so the folia are schematic. The cortex of each lobule thins or thickens by the
+// published group median (Table 1, left and right averaged) relative to controls: rose thinner, lilac thicker,
+// and the fissures widen as it thins. The ring is the structural covariance network between the 24 lobules,
+// each node coloured by its own hemisphere's value; it has the published number of edges (42, 198, 64), but
+// which pairs are joined is illustrative.
+---
+
+<figure class="pfig cerebellum">
+  <div class="stage">
+    <canvas role="img" aria-label="A side view of the cerebellum with its branching white matter and dark fissures between the folia. Its cortex thins in the anterior lobe in anti-Yo paraneoplastic cerebellar degeneration, and less, further back, in SCA1. A ring of 24 lobules beside it shows the covariance network growing much denser in anti-Yo patients."></canvas>
+  </div>
+  <output class="readout">Healthy controls (n = 17), 42 network edges</output>
+</figure>
+
+<script>
+  import { start, ITALIC, MUTED, INK, ROSE, LILAC, ramp, lerp, clamp01, rgb, mixRGB, css, gaussian, type Scene, type RGB } from '../lib/figure';
+  import { mulberry32 } from '../lib/tissue';
+
+  // Lobules (CERES names) in sagittal order, from the lingula over the top to the nodulus. Angles in degrees
+  // around the white-matter core (0 = back, 90 = up, 180 = front), read off Gray's Fig. 704. Median cortical
+  // thickness from Table 1 for controls, anti-Yo PCD and SCA1: l left, r right, v their mean.
+  const LOB = [
+    { name: 'I–II', a0: 158, a1: 146, reach: 1, l: [1.48, 0.06, 0.56], r: [0.88, 0.05, 0.41] },
+    { name: 'III', a0: 146, a1: 130, reach: 1, l: [2.06, 1.78, 1.73], r: [1.9, 1.02, 1.11] },
+    { name: 'IV', a0: 130, a1: 106, reach: 1, l: [4.6, 3.12, 4.75], r: [4.4, 1.98, 3.94] },
+    { name: 'V', a0: 106, a1: 75, reach: 1, l: [4.75, 4.04, 5.02], r: [4.05, 2.77, 4.22] },
+    { name: 'VI', a0: 75, a1: 30, reach: 1, l: [4.78, 4.18, 4.78], r: [4.56, 4.24, 4.58] },
+    { name: 'Crus I', a0: 30, a1: -25, reach: 1, l: [3.17, 1.46, 3.15], r: [2.74, 2.53, 2.55] },
+    { name: 'Crus II', a0: -25, a1: -48, reach: 1, l: [2.55, 3.22, 3.2], r: [2.98, 3.22, 3.54] },
+    { name: 'VIIB', a0: -48, a1: -62, reach: 1, l: [2.77, 4.05, 3.65], r: [2.88, 4.28, 3.13] },
+    { name: 'VIIIA', a0: -62, a1: -78, reach: 1, l: [4.18, 4.53, 4.16], r: [3.97, 4.75, 3.67] },
+    { name: 'VIIIB', a0: -78, a1: -94, reach: 1, l: [4.53, 4.31, 3.24], r: [4.74, 4.57, 3.7] },
+    { name: 'IX', a0: -94, a1: -128, reach: 1, l: [3.08, 2.47, 1.82], r: [3.3, 3.25, 1.67] },
+    { name: 'X', a0: -128, a1: -148, reach: 1, l: [1.29, 0.49, 0.55], r: [1.05, 0.83, 0.48] },
+  ].map((L) => ({ ...L, v: L.l.map((x, k) => (x + L.r[k]) / 2) }));
+  // one line each, shown under the figure
+  const GROUPS = ['Healthy controls (n = 17), 42 network edges', 'Anti-Yo PCD (n = 11): anterior thinning, 198 edges', 'SCA1 (n = 17): milder, more posterior, 64 edges'];
+  const GROW = 2.6, LOOP = 18;
+  const GREY = rgb('#c4c0b9'), WM = rgb('#f8f7f3'), FISSURE = rgb('#625d6b'), R_ = rgb(ROSE), L_ = rgb(LILAC), INK_ = rgb(INK);
+  const CT = 0.0132, CORE = 255; // cortex thickness in controls (box units); lobule id of the white-matter core
+
+  // ---- geometry, in a 0.72 × 0.75 box (y down) ----
+  const BW = 0.72, BH = 0.75, C = { x: 0.3, y: 0.31 }, RS = 0.44, CA = 0.06, CB = 0.04; // core centre, scale, core semi-axes
+  // outline: distance from the core centre (× RS) by angle, measured on Gray's Fig. 704; small in the notch of the 4th ventricle
+  const OUTLINE: [number, number][] = [[-180, 0.35], [-160, 0.38], [-147, 0.55], [-126, 0.82], [-101, 0.99], [-71, 1], [-43, 0.98], [-28, 0.99], [-4, 0.92], [26, 0.79], [54, 0.71], [86, 0.67], [109, 0.7], [139, 0.88], [158, 0.66], [170, 0.36], [180, 0.35]];
+  const rad = (a: number) => (a * Math.PI) / 180;
+  function outlineR(a: number) {
+    for (let k = 0; k < OUTLINE.length - 1; k++) {
+      const [a0, r0] = OUTLINE[k], [a1, r1] = OUTLINE[k + 1];
+      if (a >= a0 && a <= a1) { const u = (a - a0) / (a1 - a0); return RS * lerp(r0, r1, u * u * (3 - 2 * u)); }
+    }
+    return RS * 0.35;
+  }
+  const coreR = (a: number) => 1 / Math.sqrt((Math.cos(rad(a)) / CA) ** 2 + (Math.sin(rad(a)) / CB) ** 2);
+  const angleAt = (x: number, y: number) => (Math.atan2(-(y - C.y), x - C.x) * 180) / Math.PI;
+
+  type Seg = { x0: number; y0: number; x1: number; y1: number; w0: number; w1: number; lob: number; s0: number; s1: number };
+
+  function buildTree() {
+    const rnd = mulberry32(704), segs: Seg[] = [];
+    const inside = (x: number, y: number, lo: number, hi: number, reach: number) => {
+      const a = angleAt(x, y), d = Math.hypot(x - C.x, y - C.y);
+      return a > lo && a < hi && d < outlineR(a) * reach - 0.014;
+    };
+    function line(x: number, y: number, ang: number, len: number, w0: number, w1: number, lob: number, s: number, n: number) {
+      const ux = Math.cos(ang), uy = Math.sin(ang);
+      for (let k = 0; k < n; k++) {
+        const a = k / n, b = (k + 1) / n;
+        segs.push({ x0: x + ux * len * a, y0: y + uy * len * a, x1: x + ux * len * b, y1: y + uy * len * b, w0: lerp(w0, w1, a), w1: lerp(w0, w1, b), lob, s0: s + len * a, s1: s + len * b });
+      }
+      return { x: x + ux * len, y: y + uy * len, s: s + len };
+    }
+    const lengthFrom = (x: number, y: number, a: number, max: number, lo: number, hi: number, reach: number) => {
+      let l = 0; while (l < max && inside(x + Math.cos(a) * (l + 0.004), y + Math.sin(a) * (l + 0.004), lo, hi, reach)) l += 0.004;
+      return l;
+    };
+    /** a limb with folia alternating along it; long folia carry a twig of their own */
+    function limb(x: number, y: number, ang: number, len: number, w0: number, lob: number, s: number, lo: number, hi: number, reach: number, wEnd = 0.0026) {
+      const wMid = Math.max(0.006, wEnd), st = line(x, y, ang, len * 0.3, w0, wMid, lob, s, 3);
+      line(st.x, st.y, ang, len * 0.7, wMid, wEnd, lob, st.s, 5);
+      let side = rnd() < 0.5 ? 1 : -1;
+      for (let d = 0.004; d < len * 0.97; d += 0.018 + rnd() * 0.004) {
+        const fx = x + Math.cos(ang) * d, fy = y + Math.sin(ang) * d, fa = ang + side * rad(40 + rnd() * 16);
+        const fl = lengthFrom(fx, fy, fa, 0.17, lo, hi, reach);
+        if (fl > 0.01) {
+          line(fx, fy, fa, fl, 0.003, 0.0014, lob, s + d, 3);
+          // twigs off the longer folia fill the space between them, as the folia of a lobule do
+          for (const at of [0.35, 0.7]) {
+            if (fl < 0.035 / at) continue;
+            for (const tw of [1, -1]) {
+              const tx = fx + Math.cos(fa) * fl * at, ty = fy + Math.sin(fa) * fl * at, ta = fa + tw * rad(42 + rnd() * 12);
+              const tl = lengthFrom(tx, ty, ta, 0.06, lo, hi, reach);
+              if (tl > 0.01) line(tx, ty, ta, tl, 0.0022, 0.0012, lob, s + d + fl * at, 2);
+            }
+          }
+        }
+        side = -side;
+      }
+    }
+    LOB.forEach((L, i) => {
+      const am = (L.a0 + L.a1) / 2, span = L.a0 - L.a1, lo = L.a1 + 0.9, hi = L.a0 - 0.9;
+      const r0 = coreR(am) * 0.95, dmax = outlineR(am) * L.reach - 0.016, a = -rad(am);
+      const sx = C.x + Math.cos(a) * r0, sy = C.y + Math.sin(a) * r0, w0 = 0.02;
+      // wider lobules fork into two or three sub-lobules part of the way out
+      const forks = span > 30 ? 3 : span > 15 && dmax - r0 > 0.1 ? 2 : 1;
+      if (forks > 1) {
+        // the shared stem carries folia too, so no gap opens next to the core
+        const tl = (dmax - r0) * 0.3, f = { x: sx + Math.cos(a) * tl, y: sy + Math.sin(a) * tl, s: tl };
+        limb(sx, sy, a, tl, w0 * 1.2, i, 0, lo, hi, L.reach, w0 * 0.6);
+        for (let k = 0; k < forks; k++) {
+          const b0 = L.a1 + (span * k) / forks, b1 = L.a1 + (span * (k + 1)) / forks, sa = (b0 + b1) / 2;
+          // aim each sub-lobule at its own stretch of the outline
+          const tx = C.x + Math.cos(rad(sa)) * outlineR(sa) * L.reach, ty = C.y - Math.sin(rad(sa)) * outlineR(sa) * L.reach;
+          const sl = Math.hypot(tx - f.x, ty - f.y) - 0.016;
+          limb(f.x, f.y, Math.atan2(ty - f.y, tx - f.x), sl, w0 * 0.55, i, f.s, k === 0 ? lo : b0 + 0.4, k === forks - 1 ? hi : b1 - 0.4, L.reach);
+        }
+      } else limb(sx, sy, a, dmax - r0, w0, i, 0, lo, hi, L.reach);
+    });
+    // the hub of the white matter (corpus medullare), where the stems meet: no cortex of its own
+    segs.push({ x0: C.x - (CA - CB), y0: C.y, x1: C.x + (CA - CB), y1: C.y, w0: 2 * CB, w1: 2 * CB, lob: CORE, s0: 0, s1: 0 });
+    return segs;
+  }
+
+  /**
+   * Distance field on a pixel grid: for every pixel inside the outline, the nearest branch of the tree. The
+   * cortex is everything within (white-matter half-width + cortex thickness) of a branch; whatever is left
+   * inside the outline is fissure. Thinner cortex, wider dark fissures, as atrophy looks on MRI.
+   */
+  function field(segs: Seg[], gw: number, gh: number, unit: number) {
+    const CELL = 0.035, NX = Math.ceil(BW / CELL) + 1, NY = Math.ceil(BH / CELL) + 1;
+    const buckets: number[][] = Array.from({ length: NX * NY }, () => []);
+    segs.forEach((s, k) => {
+      const pad = s.lob === CORE ? CB : 0;
+      const x0 = Math.floor((Math.min(s.x0, s.x1) - pad) / CELL), x1 = Math.floor((Math.max(s.x0, s.x1) + pad) / CELL), y0 = Math.floor((Math.min(s.y0, s.y1) - pad) / CELL), y1 = Math.floor((Math.max(s.y0, s.y1) + pad) / CELL);
+      for (let bx = Math.max(0, x0); bx <= Math.min(NX - 1, x1); bx++) for (let by = Math.max(0, y0); by <= Math.min(NY - 1, y1); by++) buckets[by * NX + bx].push(k);
+    });
+    const idx: number[] = [], dist: number[] = [], lob: number[] = [], path: number[] = [];
+    const lobAt = new Int16Array(gw * gh).fill(-1);
+    for (let py = 0; py < gh; py++) for (let px = 0; px < gw; px++) {
+      const x = (px + 0.5) * unit, y = (py + 0.5) * unit;
+      if (Math.hypot(x - C.x, y - C.y) > outlineR(angleAt(x, y))) continue;
+      const bx = Math.floor(x / CELL), by = Math.floor(y / CELL);
+      let best = 0.06, bk = -1, bu = 0;
+      for (let j = by - 1; j <= by + 1; j++) for (let i = bx - 1; i <= bx + 1; i++) {
+        if (i < 0 || j < 0 || i >= NX || j >= NY) continue;
+        for (const k of buckets[j * NX + i]) {
+          const s = segs[k], dx = s.x1 - s.x0, dy = s.y1 - s.y0, l2 = dx * dx + dy * dy || 1e-9;
+          const u = clamp01(((x - s.x0) * dx + (y - s.y0) * dy) / l2), d = Math.hypot(x - s.x0 - u * dx, y - s.y0 - u * dy) - lerp(s.w0, s.w1, u) / 2;
+          if (d < best) { best = d; bk = k; bu = u; }
+        }
+      }
+      idx.push(py * gw + px);
+      if (bk < 0) { dist.push(1); lob.push(0); path.push(0); continue; } // deep in a fissure, far from any branch
+      const s = segs[bk];
+      dist.push(best); lob.push(s.lob); path.push(lerp(s.s0, s.s1, bu));
+      if (best < CT * 1.8 && s.lob !== CORE) lobAt[py * gw + px] = s.lob;
+    }
+    return { idx, dist: Float32Array.from(dist), lob: Uint8Array.from(lob), path: Float32Array.from(path), lobAt, unit };
+  }
+
+  // ---- the lobule network: 24 nodes (left and right) on a ring ----
+  function buildEdges() {
+    const rnd = mulberry32(198);
+    const pairs: [number, number][] = [];
+    for (let i = 0; i < 24; i++) for (let j = i + 1; j < 24; j++) pairs.push([i, j]);
+    const lob = (n: number) => n % 12, ant = (n: number) => lob(n) <= 3, post = (n: number) => lob(n) >= 6;
+    const pick = (count: number, score: (i: number, j: number) => number) => {
+      const s = pairs.map(([i, j]) => score(i, j) + gaussian(rnd) * 0.6);
+      return new Set([...pairs.keys()].sort((a, b) => s[b] - s[a]).slice(0, count));
+    };
+    const sets = [
+      pick(42, (i, j) => (lob(i) === lob(j) ? 3 : 0) + (Math.abs(lob(i) - lob(j)) === 1 && (i < 12) === (j < 12) ? 2 : 0)),
+      pick(198, (i, j) => (ant(i) || ant(j) ? 1.2 : 0) + (ant(i) && ant(j) ? 1 : 0) + 0.4),
+      pick(64, (i, j) => (post(i) && post(j) ? 2.2 : 0) + (lob(i) === lob(j) ? 1.5 : 0)),
+    ];
+    const sign = pairs.map(() => (rnd() < 0.82 ? 1 : -1));
+    return { pairs, sets, sign };
+  }
+
+  /** colour for a thickness ratio relative to controls: rose where thinner, lilac (quieter) where thicker */
+  const ratioColour = (ratio: number) => ratio < 1 ? mixRGB(GREY, R_, Math.min(1, (1 - ratio) * 1.5)) : mixRGB(GREY, L_, Math.min(0.6, (ratio - 1) * 1.2));
+
+  function scene(): Scene {
+    const segs = buildTree(), net = buildEdges();
+    const sMax = Math.max(...segs.filter((s) => s.lob !== CORE).map((s) => s.s1));
+    let box = { s: 1, ox: 0, oy: 0 }, ring = { x: 0, y: 0, r: 0 }, q = 1;
+    let grid: ReturnType<typeof field> | null = null, off: HTMLCanvasElement | null = null, img: ImageData | null = null;
+    const nodeXY = (n: number) => {
+      const k = n % 12, a = rad(lerp(108, 252, k / 11)), b = n < 12 ? a : Math.PI - a;
+      return { x: ring.x + Math.cos(b) * ring.r, y: ring.y - Math.sin(b) * ring.r };
+    };
+    // where the cycle is: the weight of each group, and the one shown most
+    function phase(T: number) {
+      if (T < GROW) return { wts: [1, 0, 0], dom: 0 };
+      const u = (T - GROW) % LOOP;
+      const k1 = ramp(u, 1.5, 3), k2 = ramp(u, 7.5, 9), k3 = ramp(u, 13.5, 15);
+      const wts = [1 - k1 + k3, k1 - k2, k2 - k3];
+      return { wts, dom: wts.indexOf(Math.max(...wts)) };
+    }
+    const mixRatio = (vals: number[], wts: number[]) => wts[0] + wts[1] * (vals[1] / vals[0]) + wts[2] * (vals[2] / vals[0]);
+    return {
+      still: GROW + 5,
+      resize(w, h, dpr) {
+        const s = Math.min((w * 0.6) / BW, (h - 2) / BH);
+        box = { s, ox: 0, oy: (h - BH * s) / 2 };
+        const rest = BW * s + 6;
+        ring = { x: rest + (w - rest) / 2, y: h * 0.4, r: Math.min((w - rest) * 0.3, h * 0.27) };
+        q = Math.min(1.5, dpr);
+        const gw = Math.ceil(BW * s * q), gh = Math.ceil(BH * s * q);
+        grid = field(segs, gw, gh, 1 / (s * q));
+        off = document.createElement('canvas'); off.width = gw; off.height = gh;
+        img = off.getContext('2d')!.createImageData(gw, gh);
+      },
+      click(_x, _y, T) {
+        if (T < GROW) return T;
+        const u = (T - GROW) % LOOP, base = T - u;
+        const next = u < 1.5 ? 1.5 : u < 3 ? u : u < 7.5 ? 7.5 : u < 9 ? u : u < 13.5 ? 13.5 : u < 15 ? u : LOOP + 1.5;
+        return base + next;
+      },
+      draw(ctx, w, h, T, pointer) {
+        if (!grid) this.resize!(w, h, Math.min(2, devicePixelRatio || 1));
+        const g = grid!, { wts, dom } = phase(T);
+        const grow = T < GROW ? ramp(T, 0, GROW) * sMax * 1.05 : Infinity;
+
+        // the lobule under the pointer, on the section (both sides' mean) or on the ring (one side)
+        let hover = -1, side = -1;
+        if (pointer) {
+          const gx = Math.floor((pointer.x - box.ox) * q), gy = Math.floor((pointer.y - box.oy) * q);
+          if (gx >= 0 && gy >= 0 && gx < off!.width && gy < off!.height) hover = g.lobAt[gy * off!.width + gx];
+          for (let n = 0; n < 24; n++) { const p = nodeXY(n); if (Math.hypot(pointer.x - p.x, pointer.y - p.y) < 8) { hover = n % 12; side = n < 12 ? 0 : 1; } }
+        }
+        // each lobule's cortex: thickness relative to controls, and its colour
+        const ct: number[] = [], col: RGB[] = [];
+        LOB.forEach((L, i) => {
+          const ratio = mixRatio(L.v, wts);
+          ct[i] = CT * Math.max(0.1, Math.min(1.3, ratio));
+          const c = ratioColour(ratio);
+          col[i] = i === hover ? mixRGB(c, INK_, 0.2) : c;
+        });
+        const data = img!.data; data.fill(0);
+        const u = g.unit;
+        for (let k = 0; k < g.idx.length; k++) {
+          const d = g.dist[k], lb = g.lob[k], o = g.idx[k] * 4, core = lb === CORE;
+          // the section fills in as the tree grows, so it does not appear as a dark disc first
+          const grown = core ? clamp01(grow / 0.04) : clamp01((grow - g.path[k]) / 0.02);
+          if (grown <= 0) continue;
+          const ga = core ? 0 : clamp01((ct[lb] - d) / u + 0.5), wa = clamp01(-d / u + 0.5), c = core ? GREY : col[lb];
+          const r0 = FISSURE[0] + (c[0] - FISSURE[0]) * ga, g0 = FISSURE[1] + (c[1] - FISSURE[1]) * ga, b0 = FISSURE[2] + (c[2] - FISSURE[2]) * ga;
+          data[o] = r0 + (WM[0] - r0) * wa; data[o + 1] = g0 + (WM[1] - g0) * wa; data[o + 2] = b0 + (WM[2] - b0) * wa;
+          data[o + 3] = 255 * grown;
+        }
+        off!.getContext('2d')!.putImageData(img!, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(off!, box.ox, box.oy, off!.width / q, off!.height / q);
+        ctx.font = ITALIC; ctx.fillStyle = MUTED; ctx.textBaseline = 'alphabetic';
+        ctx.textAlign = 'left'; ctx.fillText('front', box.ox + 2, box.oy + BH * box.s - 4);
+
+        // the network ring
+        ctx.globalAlpha = T < GROW ? ramp(T, GROW * 0.5, GROW) : 1; ctx.lineWidth = 0.8;
+        net.pairs.forEach(([i, j], e) => {
+          const m = wts[0] * +net.sets[0].has(e) + wts[1] * +net.sets[1].has(e) + wts[2] * +net.sets[2].has(e);
+          if (m < 0.02) return;
+          const a = nodeXY(i), b = nodeXY(j), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+          const lit = hover >= 0 && (i % 12 === hover || j % 12 === hover);
+          ctx.strokeStyle = css(rgb(net.sign[e] > 0 ? ROSE : LILAC), m * (lit ? 0.85 : hover >= 0 ? 0.15 : 0.4));
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(lerp(mx, ring.x, 0.55), lerp(my, ring.y, 0.55), b.x, b.y); ctx.stroke();
+        });
+        for (let n = 0; n < 24; n++) {
+          const p = nodeXY(n), L = LOB[n % 12], c = ratioColour(mixRatio(n < 12 ? L.l : L.r, wts));
+          ctx.fillStyle = css(n % 12 === hover ? mixRGB(c, INK_, 0.2) : c); ctx.beginPath(); ctx.arc(p.x, p.y, n % 12 === hover ? 4.2 : 3, 0, 7); ctx.fill();
+        }
+        ctx.fillStyle = MUTED; ctx.textAlign = 'center';
+        ctx.fillText('left', ring.x - ring.r * 0.62, ring.y + ring.r + 19);
+        ctx.fillText('right', ring.x + ring.r * 0.62, ring.y + ring.r + 19);
+        // legend, under the ring
+        const ly = Math.min(h - 6, ring.y + ring.r + 42);
+        ctx.textAlign = 'left';
+        const item = (x: number, colour: string, label: string) => { ctx.fillStyle = colour; ctx.beginPath(); ctx.arc(x + 4, ly - 4.5, 4, 0, 7); ctx.fill(); ctx.fillStyle = INK; ctx.fillText(label, x + 13, ly); return x + 13 + ctx.measureText(label).width + 14; };
+        const total = 13 + ctx.measureText('thinner').width + 14 + 13 + ctx.measureText('thicker').width;
+        item(item(ring.x - total / 2, ROSE, 'thinner'), LILAC, 'thicker');
+        ctx.globalAlpha = 1;
+
+        if (hover >= 0) {
+          const L = LOB[hover], v = side < 0 ? L.v : side === 0 ? L.l : L.r, where = side < 0 ? 'both sides' : side === 0 ? 'left' : 'right';
+          return `Lobule ${L.name}, ${where}: ${v[0].toFixed(2)} controls, ${v[1].toFixed(2)} anti-Yo, ${v[2].toFixed(2)} SCA1`;
+        }
+        return GROUPS[dom];
+      },
+    };
+  }
+
+  start('.cerebellum', scene);
+</script>
+
+<style>
+  .pfig { margin: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+  .stage { position: relative; min-height: 200px; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+  .readout { display: block; font-size: 14px; line-height: 1.5; min-height: 3em; color: #5f6964; }
+</style>

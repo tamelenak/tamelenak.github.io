@@ -8,13 +8,14 @@
 // Runs by itself in a slow loop and sways gently throughout; hovering does not stop it.
 // Drag sideways to turn it; with a mouse, up or down also pulls the sections apart or together.
 // The loop picks up again a moment after you let go.
-interface Props { end: 'graph' | 'mesh' | 'modes' }
-const { end } = Astro.props;
+// short: one-line marker legend, for a figure that sits in a tight frame
+interface Props { end: 'graph' | 'mesh' | 'modes'; short?: boolean }
+const { end, short = false } = Astro.props;
 const MARKERS = [
-  { label: 'PAX5, lymphoma cells', css: '#e8844f' },
-  { label: 'CD3, T cells', css: '#f2d53c' },
-  { label: 'CD163, macrophages', css: '#e23bc4' },
-  { label: 'DAPI, other nuclei', css: '#4a3fe0' },
+  { label: short ? 'PAX5 lymphoma' : 'PAX5, lymphoma cells', css: '#e8844f' },
+  { label: short ? 'CD3 T cell' : 'CD3, T cells', css: '#f2d53c' },
+  { label: short ? 'CD163 macrophage' : 'CD163, macrophages', css: '#e23bc4' },
+  { label: short ? 'DAPI nuclei' : 'DAPI, other nuclei', css: '#4a3fe0' },
 ];
 const CAPTION = {
   graph: 'Five serial multiplex sections of a synthetic lymphoma, joined into one 3D cell graph.',
@@ -29,7 +30,7 @@ const CAPTION = {
   </div>
   <figcaption>
     <p>{CAPTION}</p>
-    <ul class="legend">{MARKERS.map((m) => <li><i style={`--c:${m.css}`}></i>{m.label}</li>)}</ul>
+    <ul class:list={['legend', { tight: short }]}>{MARKERS.map((m) => <li><i style={`--c:${m.css}`}></i>{m.label}</li>)}</ul>
   </figcaption>
 </figure>
 
@@ -208,6 +209,7 @@ const CAPTION = {
   figcaption { font-size: 14px; line-height: 1.5; color: #5f6964; display: grid; gap: 4px; }
   figcaption p { margin: 0; }
   .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 16px; color: #1d2521; }
+  .legend.tight { column-gap: 12px; }
   .legend li { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1px rgb(29 37 33 / 0.3); }
 </style>

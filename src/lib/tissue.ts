@@ -1,7 +1,5 @@
 // shared synthetic tissue (public/tissue.json, made by scripts/make_tissue.py) and its renderers.
-// The H&E look and the segmentation-style cell shapes are modelled on reference images (H&E of primary CNS
-// lymphoma from Wikimedia Commons; segmentation panels of Roemer et al., iScience 2023, Fig 1).
-import { Delaunay } from 'd3-delaunay';
+// The H&E look is modelled on a reference image (H&E of primary CNS lymphoma from Wikimedia Commons).
 
 export type Tissue = {
   W: number; H: number;
@@ -203,36 +201,6 @@ export function scaledModes(t: Tissue) {
   });
 }
 
-/**
- * Segmentation-style cell outlines: each cell is its Voronoi region, capped to a plausible cell
- * radius, shrunk a little and rounded. Packed cells flatten against each other; isolated ones stay round.
- */
-export function cellShapes(t: Tissue) {
-  const delaunay = Delaunay.from(t.cells.map((c) => [c[0], c[1]] as [number, number]));
-  const vor = delaunay.voronoi([0, 0, t.W, t.H]);
-  const cap = [1.6, 1.55, 1.75, 1.7];
-  const shapes = t.cells.map((c, i) => {
-    const poly = vor.cellPolygon(i), p = new Path2D();
-    if (!poly) return p;
-    const [cx, cy, r, type] = c, R = r * cap[type];
-    const pts: [number, number][] = [];
-    for (let k = 0; k < poly.length - 1; k++) {
-      const [ax, ay] = poly[k], [bx, by] = poly[k + 1];
-      for (const u of [0, 0.34, 0.67]) {
-        let x = ax + (bx - ax) * u - cx, y = ay + (by - ay) * u - cy;
-        const d = Math.hypot(x, y) || 1, dd = Math.min(d, R) * 0.9;
-        pts.push([cx + (x / d) * dd, cy + (y / d) * dd]);
-      }
-    }
-    const n = pts.length, mid = (k: number) => [(pts[k][0] + pts[(k + 1) % n][0]) / 2, (pts[k][1] + pts[(k + 1) % n][1]) / 2];
-    let [mx, my] = mid(n - 1); p.moveTo(mx, my);
-    for (let k = 0; k < n; k++) { [mx, my] = mid(k); p.quadraticCurveTo(pts[k][0], pts[k][1], mx, my); }
-    p.closePath();
-    return p;
-  });
-  return { delaunay, shapes };
-}
-
 
 /**
  * A page-wide "pause motion" switch (WCAG 2.2.2: anything that moves by itself for more than five seconds
@@ -253,3 +221,5 @@ export function onMotionChange(cb: (paused: boolean) => void) {
 export function restoreMotionPreference() {
   try { if (localStorage.getItem(MOTION_KEY) === '1') document.documentElement.dataset.motion = 'paused'; } catch { /* ignore */ }
 }
+// restore the saved choice as soon as any figure loads, before the first one draws
+if (typeof document !== 'undefined') restoreMotionPreference();

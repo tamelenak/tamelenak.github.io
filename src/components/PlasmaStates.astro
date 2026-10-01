@@ -1,0 +1,160 @@
+---
+// Neuro-Oncology paper (prototype figure). One drop of baseline plasma per few patients falls into a heatmap of
+// plasma proteins (162 patients). Consensus clustering sorts the patients into two plasma states, and survival
+// curves show the Inflamed state doing worse. The design follows the abstract; the numbers drawn are synthetic.
+---
+
+<figure class="pfig plasma">
+  <div class="stage">
+    <canvas role="img" aria-label="Drops of blood fill a heatmap of plasma proteins, one column per patient. The patients then sort into two plasma states, Inflamed and Non-inflamed, and survival curves show shorter survival in the Inflamed state. Synthetic data."></canvas>
+  </div>
+  <output class="readout">Plasma from 162 newly diagnosed patients</output>
+</figure>
+
+<script>
+  import { start, ITALIC, MUTED, RULE, ROSE, LILAC, ramp, lerp, clamp01, gaussian, shuffle, divergingRGB, css, type Scene } from '../lib/figure';
+  import { mulberry32 } from '../lib/tissue';
+
+  const N = 162, R = 40, LOOP = 15, DROP = 6;
+  const BLOOD = '#a63d57';
+
+  function makeData() {
+    const rnd = mulberry32(20260923);
+    const g = () => gaussian(rnd);
+    const inflamed = new Uint8Array(N);
+    shuffle([...Array(N).keys()], rnd).slice(0, 65).forEach((j) => (inflamed[j] = 1));
+    // latent per patient: an inflammation score (higher in the Inflamed state) and two unrelated factors
+    const s = Array.from({ length: N }, (_, j) => (inflamed[j] ? 1 : -0.6) + g() * 0.42);
+    const f1 = Array.from({ length: N }, g), f2 = Array.from({ length: N }, g);
+    // rows 0–6 innate/inflammatory, 7–13 IFN/chemokine, then two blocks that follow other factors
+    const load = (r: number) => r < 7 ? [1.05, 0, 0] : r < 14 ? [0.6, 0.25, 0] : r < 27 ? [0.1, (r % 2 ? 0.9 : -0.7), 0] : [0, 0, r % 3 ? 0.85 : -0.8];
+    const colour: string[] = new Array(R * N);
+    for (let r = 0; r < R; r++) {
+      const [a, b, c] = load(r);
+      for (let j = 0; j < N; j++) colour[r * N + j] = css(divergingRGB(Math.max(-1, Math.min(1, (a * s[j] + b * f1[j] + c * f2[j] + g() * 0.5) / 1.6))));
+    }
+    // display slots: random at first, then sorted by state (Inflamed first) and score
+    const slot0 = new Int16Array(N), slot1 = new Int16Array(N);
+    shuffle([...Array(N).keys()], rnd).forEach((j, k) => (slot0[j] = k));
+    [...Array(N).keys()].sort((x, y) => inflamed[y] - inflamed[x] || s[y] - s[x]).forEach((j, k) => (slot1[j] = k));
+    const rowAt0 = new Int16Array(R);
+    shuffle([...Array(R).keys()], rnd).forEach((r, k) => (rowAt0[r] = k));
+    // survival (years): higher hazard in the Inflamed state, with censoring
+    const km = [1, 0].map((state) => {
+      const pts = [] as { t: number; event: boolean }[];
+      for (let j = 0; j < N; j++) if (inflamed[j] === state) {
+        const ev = -Math.log(1 - rnd()) / (state ? 0.5 : 0.17), cens = 0.8 + rnd() * 5.6;
+        pts.push({ t: Math.min(ev, cens), event: ev <= cens });
+      }
+      pts.sort((a, b) => a.t - b.t);
+      let S = 1, atRisk = pts.length;
+      const steps: { t: number; S: number; event: boolean }[] = [];
+      for (const p of pts) { if (p.event) S *= 1 - 1 / atRisk; atRisk--; steps.push({ t: p.t, S, event: p.event }); }
+      return steps;
+    });
+    return { inflamed, colour, slot0, slot1, rowAt0, km };
+  }
+
+  function scene(): Scene {
+    const d = makeData();
+    const Sat = (k: number, t: number) => { let S = 1; for (const p of d.km[k]) { if (p.t > t) break; S = p.S; } return S; };
+    const nDrops = N / DROP, landOf = (s0: number) => 0.7 + (Math.floor(s0 / DROP) / nDrops) * 2.2;
+    return {
+      still: 11,
+      draw(ctx, w, h, T) {
+        const t = T % LOOP, fade = 1 - clamp01((t - 13.6) / 1.1);
+        // layout: heatmap on the left, survival curves on the right
+        const hmTop = 22, hmBot = h - 24, hmW = w * 0.58, cw = hmW / N, rh = (hmBot - hmTop) / R;
+        const xs = (slot: number) => slot * cw;
+        // proteins sort first, then patients
+        const pRows = ramp(t, 4.2, 5.0), pCol = (k: number) => ramp(t, 5.0 + k * 0.6, 5.9 + k * 0.6);
+
+        // one drop of plasma per few patients: it falls with gravity and spreads into their columns
+        for (let k = 0; k < nDrops; k++) {
+          const land = 0.7 + (k / nDrops) * 2.2;
+          if (t > land + 0.1 || t < land - 0.5) continue;
+          const u = clamp01((t - (land - 0.5)) / 0.5), y = lerp(-8, hmTop - 3, u * u), x = xs(k * DROP + DROP / 2);
+          ctx.fillStyle = BLOOD; ctx.globalAlpha = fade * (1 - clamp01((t - land) / 0.1));
+          ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.bezierCurveTo(x + 1.2, y - 4.5, x + 3.6, y - 2.4, x + 3.6, y); ctx.arc(x, y, 3.6, 0, Math.PI); ctx.bezierCurveTo(x - 3.6, y - 2.4, x - 1.2, y - 4.5, x, y - 8); ctx.fill();
+        }
+        ctx.globalAlpha = fade;
+        // While the patients and proteins re-sort, each column (and row) stretches to meet the next one,
+        // so the heatmap stays one closed block instead of breaking into stripes.
+        const cx = new Float32Array(N), filled = new Float32Array(N), pc = new Float32Array(N);
+        for (let j = 0; j < N; j++) {
+          const s0 = d.slot0[j];
+          pc[j] = pCol(s0 / N);
+          cx[j] = lerp(xs(s0), xs(d.slot1[j]), pc[j]);
+          filled[j] = clamp01((t - landOf(s0) - ((s0 % DROP) / DROP) * 0.06) / 0.4) * R;
+        }
+        const ry = new Float32Array(R);
+        for (let r = 0; r < R; r++) ry[r] = hmTop + lerp(d.rowAt0[r], r, pRows) * rh;
+        const cOrd = [...Array(N).keys()].sort((a, b) => cx[a] - cx[b]), rOrd = [...Array(R).keys()].sort((a, b) => ry[a] - ry[b]);
+        cOrd.forEach((j, k) => {
+          if (filled[j] <= 0) return;
+          const x0 = k === 0 ? 0 : cx[j], wd = Math.max(0.6, (k + 1 < N ? cx[cOrd[k + 1]] : hmW) - x0);
+          rOrd.forEach((r, m) => {
+            if (d.rowAt0[r] >= filled[j]) return;
+            const y0 = m === 0 ? hmTop : ry[r], ny = m + 1 < R ? ry[rOrd[m + 1]] : hmBot;
+            ctx.fillStyle = d.colour[r * N + j];
+            ctx.fillRect(x0, y0, wd + 0.5, ny - y0 + 0.5);
+          });
+          // state bar above the column, once it is sorted
+          if (pc[j] > 0) { ctx.fillStyle = d.inflamed[j] ? ROSE : LILAC; ctx.globalAlpha = fade * pc[j]; ctx.fillRect(x0, hmTop - 8, wd + 0.5, 4); ctx.globalAlpha = fade; }
+        });
+        ctx.font = ITALIC; ctx.fillStyle = MUTED; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+        ctx.fillText('162 patients', hmW / 2, h - 6);
+
+        // survival curves
+        const q = ramp(t, 6.4, 9.2);
+        const kx0 = w * 0.67, kx1 = w - 4, ky0 = hmTop, ky1 = hmBot, YRS = 5;
+        const kx = (y: number) => kx0 + (y / YRS) * (kx1 - kx0), ky = (S: number) => ky1 - S * (ky1 - ky0);
+        const axes = ramp(t, 5.9, 6.6);
+        if (axes > 0) {
+          ctx.globalAlpha = fade * axes;
+          ctx.strokeStyle = RULE; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(kx0, ky0); ctx.lineTo(kx0, ky1); ctx.lineTo(kx1, ky1); ctx.stroke();
+          ctx.fillStyle = MUTED; ctx.textAlign = 'left'; ctx.fillText('overall survival', kx0 + 6, ky0 - 6);
+          ctx.fillText('0', kx0 - 3, h - 6); ctx.textAlign = 'right'; ctx.fillText(`${YRS} years`, kx1, h - 6);
+          ctx.globalAlpha = fade;
+        }
+        if (q > 0) {
+          const tau = q * YRS;
+          [0, 1].forEach((k) => {
+            ctx.strokeStyle = k === 0 ? ROSE : LILAC; ctx.lineWidth = 1.7; ctx.lineJoin = 'miter';
+            ctx.beginPath(); let S = 1; ctx.moveTo(kx(0), ky(1));
+            for (const p of d.km[k]) {
+              if (p.t > tau) break;
+              ctx.lineTo(kx(p.t), ky(S)); S = p.S; ctx.lineTo(kx(p.t), ky(S));
+            }
+            ctx.lineTo(kx(tau), ky(S)); ctx.stroke();
+            ctx.lineWidth = 1;
+            for (const p of d.km[k]) { if (p.t > tau || p.t > YRS) break; if (!p.event) { ctx.beginPath(); ctx.moveTo(kx(p.t), ky(p.S) - 3); ctx.lineTo(kx(p.t), ky(p.S) + 3); ctx.stroke(); } }
+          });
+          ctx.globalAlpha = fade * ramp(t, 8.2, 9.2);
+          ctx.font = ITALIC; ctx.textAlign = 'right';
+          // each label sits above its curve along the whole width of the label (the curves only fall)
+          const yrsAt = (x: number) => ((x - kx0) / (kx1 - kx0)) * YRS;
+          const wN = ctx.measureText('Non-inflamed').width, wI = ctx.measureText('Inflamed').width;
+          ctx.fillStyle = LILAC; ctx.fillText('Non-inflamed', kx1, ky(Sat(1, yrsAt(kx1 - wN - 6))) - 7);
+          ctx.fillStyle = ROSE; ctx.fillText('Inflamed', kx1, ky(Sat(0, yrsAt(kx1 - wI - 6))) - 7);
+        }
+        ctx.globalAlpha = 1;
+        if (t < 3.2) return 'Plasma from 162 newly diagnosed patients';
+        if (t < 4.2) return '1,007 proteins measured in each sample';
+        if (t < 6.4) return 'Consensus clustering finds two plasma states';
+        return 'Inflamed plasma: shorter overall survival';
+      },
+    };
+  }
+
+  start('.plasma', scene);
+</script>
+
+<style>
+  .pfig { margin: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+  .stage { position: relative; min-height: 200px; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+  /* two lines are always reserved, so the figure never changes size while the text changes */
+  .readout { display: block; font-size: 14px; line-height: 1.5; min-height: 3em; color: #5f6964; }
+</style>

@@ -1,0 +1,134 @@
+---
+// NeurIPS ML4SpatialBio abstract (prototype figure). A labelled single-cell RNA atlas (left) and the cells of
+// an unlabelled multiplex image (right) move into one shared space. Each image cell takes the type of its
+// nearest atlas cells, then flies back into the tissue in colour, and the cell graph corrects the labels that
+// disagree with their neighbours. Atlas and embedding are synthetic; the tissue is the site's synthetic lymphoma.
+import { TYPES } from '../lib/tissue';
+---
+
+<figure class="pfig common">
+  <div class="stage">
+    <canvas role="img" aria-label="Coloured cells of a single-cell RNA atlas and grey cells of a tissue image move into one shared space. The tissue cells take the colours of the atlas cells near them, return to their places in the tissue, and a few labels are corrected to agree with their neighbours."></canvas>
+  </div>
+  <output class="readout">A labelled RNA atlas and an unlabelled tissue image</output>
+  <ul class="legend">{TYPES.map((t) => <li><i style={`--c:${t.colour}`}></i>{t.name}</li>)}</ul>
+</figure>
+
+<script>
+  import { start, ITALIC, MUTED, ramp, lerp, clamp01, gaussian, rgb, mixRGB, css, type Scene, type RGB } from '../lib/figure';
+  import { loadTissue, mulberry32, TYPES, type Tissue } from '../lib/tissue';
+
+  const LOOP = 18;
+  const COL: RGB[] = TYPES.map((t) => rgb(t.colour)), GREY: RGB = rgb('#b4bab4');
+  // the atlas in its own 2D embedding (unit square): blobs per type, some with sub-populations
+  const BLOBS = [
+    [{ x: 0.36, y: 0.38, s: 0.07, n: 120 }, { x: 0.5, y: 0.5, s: 0.055, n: 80 }],
+    [{ x: 0.74, y: 0.24, s: 0.05, n: 70 }, { x: 0.84, y: 0.36, s: 0.04, n: 45 }],
+    [{ x: 0.66, y: 0.76, s: 0.055, n: 70 }],
+    [{ x: 0.22, y: 0.74, s: 0.05, n: 65 }],
+  ];
+
+  function scene(t: Tissue): Scene {
+    const rnd = mulberry32(2026), g = () => gaussian(rnd);
+    const atlas: { x: number; y: number; type: number }[] = [];
+    BLOBS.forEach((bs, type) => bs.forEach((b) => { for (let k = 0; k < b.n; k++) atlas.push({ x: b.x + g() * b.s * 1.1, y: b.y + g() * b.s, type }); }));
+    // the tissue field and its cells
+    const cw = t.W * 0.3, ch = cw * 1.25, cx0 = t.W * 0.42 - cw / 2, cy0 = t.H * 0.5 - ch / 2;
+    const ids = t.cells.map((_, i) => i).filter((i) => { const [x, y] = t.cells[i]; return x > cx0 && x < cx0 + cw && y > cy0 && y < cy0 + ch; });
+    const local = new Map(ids.map((id, k) => [id, k]));
+    // each image cell lands near atlas cells of its true type; weak linkage makes some land between types
+    const cells = ids.map((id) => {
+      const type = t.cells[id][3], same = atlas.filter((a) => a.type === type), a = same[Math.floor(rnd() * same.length)];
+      let x = a.x + g() * 0.03, y = a.y + g() * 0.03, unsure = false;
+      if (rnd() < 0.11) { const o = atlas[Math.floor(rnd() * atlas.length)], m = 0.45 + rnd() * 0.2; x = lerp(x, o.x, m); y = lerp(y, o.y, m); unsure = true; }
+      return { id, type, ex: x, ey: y, hx: t.cells[id][0], hy: t.cells[id][1], label: 0, refined: 0, core: 0, unsure };
+    });
+    // label transfer: majority type among the 9 nearest atlas cells
+    for (const c of cells) {
+      const near = atlas.map((a) => ({ d: (a.x - c.ex) ** 2 + (a.y - c.ey) ** 2, type: a.type })).sort((p, q) => p.d - q.d).slice(0, 9);
+      const votes = [0, 0, 0, 0]; near.forEach((n) => votes[n.type]++);
+      c.label = votes.indexOf(Math.max(...votes)); c.core = Math.sqrt(near[4].d);
+    }
+    // graph refinement, drawn schematically: only cells whose transfer was unsure (they landed between
+    // types) are reconsidered, and they settle on their type. Confident cells, including the T cells that
+    // sit among lymphoma cells, keep their label; a plain majority vote would wrongly erase them.
+    const edges: [number, number][] = [];
+    for (const [i, j] of t.edges) if (local.has(i) && local.has(j)) edges.push([local.get(i)!, local.get(j)!]);
+    cells.forEach((c) => { c.refined = c.unsure ? c.type : c.label; });
+    const coreMax = Math.max(...cells.map((c) => c.core));
+    const changed = cells.filter((c) => c.refined !== c.label).length;
+
+    let L = { pw: 0, top: 0, size: 0, lx: 0, cx: 0, rx: 0, ts: 1, tox: 0, toy: 0 };
+    return {
+      still: 13,
+      resize(w, h) {
+        const pw = w / 3, top = 24, size = Math.min(pw - 10, h - top - 4);
+        const ts = Math.min((pw - 8) / cw, (h - top - 4) / ch);
+        L = { pw, top, size, lx: (pw - size) / 2, cx: pw + (pw - size) / 2, rx: 2 * pw, ts, tox: 2 * pw + (pw - cw * ts) / 2, toy: top + (h - top - 4 - ch * ts) / 2 };
+      },
+      draw(ctx, w, h, T) {
+        if (!L.pw) this.resize!(w, h, 1);
+        const u = T % LOOP;
+        const go = (d: number) => ramp(u, 1.6 + d, 3.4 + d), back = (d: number) => ramp(u, 6.6 + d, 8.4 + d);
+        const atlasXY = (x: number, y: number, p: number) => ({ x: lerp(L.lx, L.cx, p) + x * L.size, y: L.top + y * L.size });
+        const tissueXY = (x: number, y: number) => ({ x: L.tox + (x - cx0) * L.ts, y: L.toy + (y - cy0) * L.ts });
+
+        // panel names
+        ctx.font = ITALIC; ctx.textAlign = 'center'; ctx.fillStyle = MUTED;
+        const inMiddle = Math.min(go(0), 1 - back(0));
+        ctx.globalAlpha = 1 - inMiddle * 0.7; ctx.fillText('RNA atlas', L.pw / 2, 14);
+        ctx.globalAlpha = 0.3 + inMiddle * 0.7; ctx.fillText('shared space', L.pw * 1.5, 14);
+        ctx.globalAlpha = 1 - inMiddle * 0.7; ctx.fillText('tissue image', L.pw * 2.5, 14);
+        ctx.globalAlpha = 1;
+
+        // tissue graph, faintly, while the labels are refined
+        const graph = ramp(u, 8.6, 9.4) * (1 - ramp(u, 16.4, 17.4));
+        if (graph > 0) {
+          ctx.strokeStyle = `rgba(29,37,33,${(0.22 * graph).toFixed(3)})`; ctx.lineWidth = 0.6; ctx.beginPath();
+          for (const [a, b] of edges) { const p = tissueXY(cells[a].hx, cells[a].hy), q = tissueXY(cells[b].hx, cells[b].hy); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); }
+          ctx.stroke();
+        }
+
+        // atlas cells: they dim while the image cells take their labels
+        const dim = ramp(u, 3.6, 4.4) * (1 - ramp(u, 6.4, 7.4));
+        const pa = go(0) * (1 - back(0));
+        for (const a of atlas) {
+          const p = atlasXY(a.x, a.y, pa);
+          ctx.fillStyle = css(COL[a.type], 0.9 - dim * 0.6); ctx.beginPath(); ctx.arc(p.x, p.y, 1.7, 0, 7); ctx.fill();
+        }
+
+        // image cells
+        const reset = ramp(u, 16.4, 17.6);
+        cells.forEach((c) => {
+          const d = ((c.hx - cx0) / cw) * 0.7, p = go(d) * (1 - back(d));
+          const home = tissueXY(c.hx, c.hy), emb = atlasXY(c.ex, c.ey, 1);
+          const x = lerp(home.x, emb.x, p), y = lerp(home.y, emb.y, p);
+          const lab = ramp(u, 3.9 + (c.core / coreMax) * 1.8, 4.3 + (c.core / coreMax) * 1.8);
+          const fix = c.refined !== c.label ? ramp(u, 9.8 + (c.hx - cx0) / cw, 10.4 + (c.hx - cx0) / cw) : 0;
+          let col = mixRGB(GREY, mixRGB(COL[c.label], COL[c.refined], fix), lab);
+          col = mixRGB(col, GREY, reset);
+          ctx.fillStyle = css(col); ctx.beginPath(); ctx.arc(x, y, 2, 0, 7); ctx.fill();
+          if (fix > 0 && fix < 1) { ctx.strokeStyle = css(COL[c.refined], 1 - fix); ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(x, y, 2 + fix * 7, 0, 7); ctx.stroke(); }
+        });
+
+        if (u < 1.6 || u >= 16.4) return 'A labelled RNA atlas and an unlabelled tissue image';
+        if (u < 3.8) return 'Both are placed in one shared space';
+        if (u < 6.6) return 'Image cells take the type of their nearest atlas cells';
+        if (u < 9.6) return 'Back in the tissue, every cell has a type';
+        return `The cell graph corrects ${changed} unsure labels`;
+      },
+    };
+  }
+
+  start('.common', async () => scene(await loadTissue()));
+</script>
+
+<style>
+  .pfig { margin: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; gap: 8px; }
+  .stage { position: relative; min-height: 200px; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+  .readout { display: block; font-size: 14px; line-height: 1.5; min-height: 3em; color: #5f6964; }
+  .legend { list-style: none; margin: -4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 14px; line-height: 1.5; color: #1d2521; }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+</style>
