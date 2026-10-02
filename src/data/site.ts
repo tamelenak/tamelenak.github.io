@@ -59,7 +59,7 @@ export const research: {
     question: 'Can we measure the shape and texture of every cell on a slide?',
     answer:
       'QuRad is an open-source QuPath extension we built. It computes 103 radiomic features of shape, intensity and texture for every cell, each checked against PyRadiomics.',
-    cite: { authors: 'Künzle T, Arslan J, Alentorn A.', title: 'QuRad: radiomic feature extraction from cell detections in QuPath', venue: 'Computational and Structural Biotechnology Journal, under revision', year: '2026', doi: '10.5281/zenodo.20628111' },
+    cite: { authors: 'Künzle T, Arslan J, Alentorn A.', title: 'QuRad: radiomic feature extraction from cell detections in QuPath', venue: 'Computational and Structural Biotechnology Journal, accepted', year: '2026', doi: '10.5281/zenodo.20628111' },
     links: [
       { label: 'Software', href: 'https://github.com/icm-dac/QuRad' },
       { label: 'Documentation', href: 'https://icm-dac.github.io/QuRad/' },
@@ -68,10 +68,10 @@ export const research: {
 ];
 
 export const latest = [
+  { date: 'Oct 2026', text: 'QuRad paper accepted in Computational and Structural Biotechnology Journal' },
   { date: 'Sept 2026', text: 'Extended abstract accepted at the NeurIPS 2026 ML4SpatialBio workshop' },
   { date: 'Sept 2026', text: 'Gave a talk at EANO 2026 in Rome' },
   { date: 'Sept 2026', text: 'Plasma proteomics paper published in Neuro-Oncology' },
-  { date: 'Sept 2026', text: 'QuRad v0.4.0 released' },
   { date: 'Jul 2026', text: 'Cerebellar degeneration paper published in Journal of Neurology' },
 ];
 
@@ -95,7 +95,7 @@ export const links: Link[] = [
   { label: 'LinkedIn', href: 'https://www.linkedin.com/in/tamara-kuenzle' },
 ];
 
-// First-author publications: the research items that have a paper (or a manuscript under revision).
+// First-author publications: the research items with a published or accepted paper.
 export const firstAuthor = research.filter((r) => !r.status);
 
 // Other work: co-authored papers, conference contributions and ongoing work, newest first.
