@@ -22,9 +22,10 @@ export type Citation = { authors: string; title: string; venue: string; year: st
 
 // A publication as the page lists it: the citation first (title, authors, venue), then one plain-language
 // line. `fig` names the figure drawn beside it (see index.astro).
-export type Publication = Citation & { summary?: string; links: Link[]; fig?: 'plasma' | 'cerebellum' | 'qurad' | 'common' };
+export type Fig = 'plasma' | 'cerebellum' | 'qurad' | 'common';
+export type Publication = Citation & { summary?: string; links: Link[]; fig?: Fig };
 
-// First-author publications, newest first within each kind (journal articles, then the workshop paper).
+// First-author publications, newest first.
 export const firstAuthor: Publication[] = [
   {
     title: 'Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma',
@@ -43,12 +44,6 @@ export const firstAuthor: Publication[] = [
     authors: 'Künzle T, Arslan J, Güner Y, Alentorn A.', venue: 'Computational and Structural Biotechnology Journal', year: '2026', note: 'accepted',
     summary: 'An open-source QuPath extension that computes 103 radiomic features of shape, intensity and texture for every cell, each checked against PyRadiomics.',
     links: [{ label: 'Code', href: 'https://github.com/institutducerveau/QuRad' }, { label: 'Documentation', href: 'https://institutducerveau.github.io/QuRad/' }], fig: 'qurad',
-  },
-  {
-    title: 'Zero-annotation cell typing for spatial proteomics in the weak-linkage regime',
-    authors: 'Künzle T, et al.', venue: 'NeurIPS 2026 Workshop on Machine Learning for Spatially Resolved High-dimensional Biology (ML4SpatialBio)', year: '2026', note: 'extended abstract, accepted',
-    summary: 'Typing every cell of a multiplex image by matching it to a labelled single-cell RNA atlas, when the two share only a few markers.',
-    links: [], fig: 'common',
   },
 ];
 
@@ -77,14 +72,16 @@ export const software = {
   ],
 };
 
-// Talks and presentations, newest first. `slides` is a file under public/; the link shows once the file is there.
-export const talks: { title: string; kind: string; event: string; date: string; slides?: string }[] = [
+// Posters and talks, newest first, listed like the publications. `slides` is a file under public/; its link
+// shows once the file is there.
+export const talks: { title: string; authors: string; kind: string; event: string; date: string; summary?: string; fig?: Fig; slides?: string }[] = [
   {
-    title: 'Zero-annotation cell typing for spatial proteomics in the weak-linkage regime', kind: 'Extended abstract, accepted',
+    title: 'Zero-annotation cell typing for spatial proteomics in the weak-linkage regime', authors: 'Künzle T, et al.', kind: 'Poster',
     event: 'NeurIPS 2026 Workshop on Machine Learning for Spatially Resolved High-dimensional Biology (ML4SpatialBio), Paris', date: 'December 2026',
+    summary: 'Typing every cell of a multiplex image by matching it to a labelled single-cell RNA atlas, when the two share only a few markers.', fig: 'common',
   },
   {
-    title: 'Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma', kind: 'Oral presentation',
+    title: 'Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma', authors: 'Künzle T, et al.', kind: 'Oral presentation',
     event: '21st Meeting of the European Association of Neuro-Oncology (EANO), Rome', date: 'September 2026', slides: 'talks/EANO2026_Kuenzle_slides.pdf',
   },
 ];
@@ -97,7 +94,7 @@ export const ongoing = {
 
 export const latest = [
   { date: 'Oct 2026', text: 'QuRad paper accepted in Computational and Structural Biotechnology Journal' },
-  { date: 'Sept 2026', text: 'Extended abstract accepted at the NeurIPS 2026 ML4SpatialBio workshop' },
+  { date: 'Sept 2026', text: 'Poster accepted at the NeurIPS 2026 ML4SpatialBio workshop' },
   { date: 'Sept 2026', text: 'Gave a talk at EANO 2026 in Rome' },
   { date: 'Sept 2026', text: 'Plasma proteomics paper published in Neuro-Oncology' },
   { date: 'Jul 2026', text: 'Cerebellar degeneration paper published in Journal of Neurology' },

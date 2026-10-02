@@ -206,10 +206,10 @@
     return {
       still: GROW + 5,
       resize(w, h, dpr) {
-        const s = Math.min((w * 0.6) / BW, (h - 2) / BH);
-        box = { s, ox: 0, oy: (h - BH * s) / 2 };
-        const rest = BW * s + 6;
-        ring = { x: rest + (w - rest) / 2, y: h * 0.4, r: Math.min((w - rest) * 0.3, h * 0.27) };
+        // the section centred in the left 58% of the figure, the ring in the rest
+        const split = w * 0.58, s = Math.min((split - 8) / BW, (h - 2) / BH);
+        box = { s, ox: (split - BW * s) / 2, oy: (h - BH * s) / 2 };
+        ring = { x: split + (w - split) / 2, y: h * 0.4, r: Math.min((w - split) * 0.3, h * 0.27) };
         q = Math.min(1.5, dpr);
         const gw = Math.ceil(BW * s * q), gh = Math.ceil(BH * s * q);
         grid = field(segs, gw, gh, 1 / (s * q));

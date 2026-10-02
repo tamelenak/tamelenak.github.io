@@ -31,7 +31,7 @@ const year = new Date().getFullYear();
       <a href="#about">About</a>
       <a href="#publications">Publications</a>
       <a href="#software">Software</a>
-      <a href="#talks">Talks</a>
+      <a href="#talks">Posters and talks</a>
       <a href="#cv">CV</a>
       <a href="#contact">Contact</a>
       <button type="button" class="motion" aria-pressed="false">Pause motion</button>
@@ -115,16 +115,23 @@ const year = new Date().getFullYear();
         </section>
 
         <section id="talks" class="row" aria-labelledby="talks-h">
-          <h2 id="talks-h">Talks</h2>
-          <ol class="body grid2 talks">
-            {talks.map((t) => (
-              <li class="item">
-                <time>{t.date}</time>
-                <h3 class="title">{t.title}</h3>
-                <p>{t.kind}, {t.event}.{hasFile(t.slides) && <> <a href={`/${t.slides}`}>slides (PDF)</a></>}</p>
-              </li>
-            ))}
-          </ol>
+          <h2 id="talks-h">Posters and talks</h2>
+          <div class="body papers">
+            {talks.map((t) => {
+              const Fig = t.fig && FIG[t.fig];
+              return (
+                <article class={Fig ? 'paper' : 'paper plain'}>
+                  <div class="text">
+                    <h3 class="title">{t.title}</h3>
+                    <p class="authors" set:html={bold(t.authors)} />
+                    <p class="venue">{t.kind}, <i>{t.event}</i>, {t.date}.{hasFile(t.slides) && <> <a href={`/${t.slides}`}>slides (PDF)</a></>}</p>
+                    {t.summary && <p class="summary">{t.summary}</p>}
+                  </div>
+                  {Fig && <div class="fig"><Fig /></div>}
+                </article>
+              );
+            })}
+          </div>
         </section>
 
         <section id="cv" class="row" aria-labelledby="cv-h">
@@ -266,7 +273,6 @@ const year = new Date().getFullYear();
   .links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
   .code { display: grid; gap: 6px; color: #3a443f; }
   .code a { font-weight: 600; }
-  .talks time { font-size: var(--small); }
   .fig { position: relative; min-height: 0; }
   .fig > :global(figure) { position: absolute; inset: 0; height: auto; }
   .fig :global(.stage) { min-height: 0; }
