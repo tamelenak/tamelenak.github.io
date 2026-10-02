@@ -2,12 +2,23 @@
 
 > PhD candidate at the Paris Brain Institute (ICM) and École Polytechnique, Sorbonne Université (MSCA COFUND fellow, SOUND.AI). She applies machine learning and spatial analysis to brain tumors, mostly primary CNS lymphoma: plasma proteomics, multiplex tissue imaging and MRI.
 
-- [Homepage](https://tamelenak.github.io/): research, first-author publications, other work, CV and contact.
+- [Homepage](https://tamelenak.github.io/): publications, software, talks, CV and contact.
 - [ORCID](https://orcid.org/0009-0005-7663-6819)
 - [GitHub](https://github.com/tamelenak)
 
 ## First-author publications
 
 - Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma. Neuro-Oncology, 2026. https://doi.org/10.1093/neuonc/noag190
-- Spatial analysis of paraneoplastic cerebellar degeneration in ovarian cancer with anti-Yo syndrome and SCA1. Journal of Neurology, 2026. https://doi.org/10.1007/s00415-026-13884-0
-- QuRad: radiomic feature extraction from cell detections in QuPath. Computational and Structural Biotechnology Journal, accepted 2026. Software: https://doi.org/10.5281/zenodo.23062834
+- Spatial analysis of paraneoplastic cerebellar degeneration in ovarian cancer with anti-Yo syndrome and SCA1. Journal of Neurology, 2026;273:493. https://doi.org/10.1007/s00415-026-13884-0
+- QuRad: radiomic feature extraction from cell detections in QuPath. Computational and Structural Biotechnology Journal, 2026, accepted.
+- Zero-annotation cell typing for spatial proteomics in the weak-linkage regime. NeurIPS 2026 Workshop on Machine Learning for Spatially Resolved High-dimensional Biology (ML4SpatialBio), extended abstract, accepted.
+
+## Software
+
+- QuRad, a QuPath extension for radiomic feature extraction from cell detections: https://github.com/institutducerveau/QuRad (archive: https://doi.org/10.5281/zenodo.23062834)
+- Analysis code for the Neuro-Oncology paper: https://github.com/tamelenak/pcnsl-plasma-proteomics
+- Analysis code for the Journal of Neurology paper: https://github.com/tamelenak/pcd-spatial-analysis
+
+## Talks
+
+- Plasma proteomics for prognostic stratification in newly diagnosed PCNSL. Oral presentation, 21st Meeting of the European Association of Neuro-Oncology (EANO), Rome, September 2026.

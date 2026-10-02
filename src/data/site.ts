@@ -20,52 +20,80 @@ export type Link = { label: string; href: string };
 
 export type Citation = { authors: string; title: string; venue: string; year: string; doi?: string; note?: string };
 
-export const research: {
-  question: string;
-  answer: string;
-  status?: string;
-  cite?: Citation;
-  links: Link[];
-}[] = [
+// A publication as the page lists it: the citation first (title, authors, venue), then one plain-language
+// line. `fig` names the figure drawn beside it (see index.astro).
+export type Publication = Citation & { summary?: string; links: Link[]; fig?: 'plasma' | 'cerebellum' | 'qurad' | 'common' };
+
+// First-author publications, newest first within each kind (journal articles, then the workshop paper).
+export const firstAuthor: Publication[] = [
   {
-    question: 'Can a blood sample tell which lymphoma patients are at higher risk?',
-    answer:
-      'We analyzed about 1,000 plasma proteins from 162 patients with primary CNS lymphoma and found an "inflamed" blood state linked to shorter survival, in two independent cohorts.',
-    cite: { authors: 'Künzle T, Herzi D, Boer Wigman C, et al.', title: 'Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma', venue: 'Neuro-Oncology', year: '2026', doi: '10.1093/neuonc/noag190' },
-    links: [
-      { label: 'Paper in Neuro-Oncology', href: 'https://doi.org/10.1093/neuonc/noag190' },
-      { label: 'Code', href: 'https://github.com/tamelenak/pcnsl-plasma-proteomics' },
-    ],
+    title: 'Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma',
+    authors: 'Künzle T, Herzi D, Boer Wigman C, et al.', venue: 'Neuro-Oncology', year: '2026', doi: '10.1093/neuonc/noag190',
+    summary: 'About 1,000 plasma proteins from 162 patients reveal an "inflamed" blood state linked to shorter survival, in two independent cohorts.',
+    links: [{ label: 'Code', href: 'https://github.com/tamelenak/pcnsl-plasma-proteomics' }], fig: 'plasma',
   },
   {
-    question: 'Which immune cells sit where inside a brain lymphoma, and does it matter?',
-    answer:
-      "We're building a spatial map of the tumor's immune environment from serial-section multiplex immunofluorescence.",
-    status: 'In progress',
-    cite: { authors: 'Künzle T, et al.', title: 'Spatial proteomics of the PCNSL immune microenvironment', venue: 'Ongoing work', year: '2026' },
-    links: [],
+    title: 'Spatial analysis of paraneoplastic cerebellar degeneration in ovarian cancer with anti-Yo syndrome and SCA1',
+    authors: 'Künzle T, Rincón de la Rosa L, Vialatte de Pémille C, et al.', venue: 'Journal of Neurology', year: '2026', note: '273:493', doi: '10.1007/s00415-026-13884-0',
+    summary: 'Cortical thickness of 24 cerebellar lobules from MRI, and how the lobules co-vary as a network, in anti-Yo PCD, SCA1 and healthy controls.',
+    links: [{ label: 'Code', href: 'https://github.com/tamelenak/pcd-spatial-analysis' }], fig: 'cerebellum',
   },
   {
-    question: 'How does an autoimmune attack reshape the cerebellum?',
-    answer:
-      'From MRI, we measured the cortical thickness of 24 cerebellar lobules, and how the lobules co-vary as a network, in anti-Yo paraneoplastic cerebellar degeneration, compared with SCA1 and healthy controls.',
-    cite: { authors: 'Künzle T, Rincón de la Rosa L, Vialatte de Pémille C, et al.', title: 'Spatial analysis of paraneoplastic cerebellar degeneration in ovarian cancer with anti-Yo syndrome and SCA1', venue: 'Journal of Neurology', year: '2026', note: '273:493', doi: '10.1007/s00415-026-13884-0' },
-    links: [
-      { label: 'Paper in Journal of Neurology', href: 'https://doi.org/10.1007/s00415-026-13884-0' },
-      { label: 'Code', href: 'https://github.com/tamelenak/pcd-spatial-analysis' },
-    ],
+    title: 'QuRad: radiomic feature extraction from cell detections in QuPath',
+    authors: 'Künzle T, Arslan J, Güner Y, Alentorn A.', venue: 'Computational and Structural Biotechnology Journal', year: '2026', note: 'accepted',
+    summary: 'An open-source QuPath extension that computes 103 radiomic features of shape, intensity and texture for every cell, each checked against PyRadiomics.',
+    links: [{ label: 'Code', href: 'https://github.com/institutducerveau/QuRad' }, { label: 'Documentation', href: 'https://institutducerveau.github.io/QuRad/' }], fig: 'qurad',
   },
   {
-    question: 'Can we measure the shape and texture of every cell on a slide?',
-    answer:
-      'QuRad is an open-source QuPath extension we built. It computes 103 radiomic features of shape, intensity and texture for every cell, each checked against PyRadiomics.',
-    cite: { authors: 'Künzle T, Arslan J, Güner Y, Alentorn A.', title: 'QuRad: radiomic feature extraction from cell detections in QuPath', venue: 'Computational and Structural Biotechnology Journal, accepted', year: '2026', doi: '10.5281/zenodo.23062834' },
-    links: [
-      { label: 'Code', href: 'https://github.com/institutducerveau/QuRad' },
-      { label: 'Documentation', href: 'https://institutducerveau.github.io/QuRad/' },
-    ],
+    title: 'Zero-annotation cell typing for spatial proteomics in the weak-linkage regime',
+    authors: 'Künzle T, et al.', venue: 'NeurIPS 2026 Workshop on Machine Learning for Spatially Resolved High-dimensional Biology (ML4SpatialBio)', year: '2026', note: 'extended abstract, accepted',
+    summary: 'Typing every cell of a multiplex image by matching it to a labelled single-cell RNA atlas, when the two share only a few markers.',
+    links: [], fig: 'common',
   },
 ];
+
+// Other publications (co-authored).
+export const otherPublications: Publication[] = [
+  {
+    title: 'h5adify: neuro-symbolic metadata harmonization enables scalable AnnData integration with local large language models',
+    authors: 'Rincón de la Rosa L, Mouazer A, Navidi M, Degroodt E, Künzle T, et al.', venue: 'bioRxiv', year: '2026', note: 'preprint', doi: '10.64898/2026.02.28.708740',
+    links: [],
+  },
+];
+
+// Software released with the work: QuRad on its own, then the analysis code published with each paper.
+export const software = {
+  qurad: {
+    name: 'QuRad', description: 'Open-source QuPath extension for radiomic feature extraction from cell detections: 103 features of shape, intensity and texture per cell, each checked against PyRadiomics.',
+    links: [
+      { label: 'GitHub', href: 'https://github.com/institutducerveau/QuRad' },
+      { label: 'Documentation', href: 'https://institutducerveau.github.io/QuRad/' },
+      { label: 'Zenodo', href: 'https://doi.org/10.5281/zenodo.23062834' },
+    ],
+  },
+  analysis: [
+    { name: 'pcnsl-plasma-proteomics', description: 'Analysis code for the Neuro-Oncology paper: consensus clustering, immune signatures and survival models.', href: 'https://github.com/tamelenak/pcnsl-plasma-proteomics' },
+    { name: 'pcd-spatial-analysis', description: 'Analysis code for the Journal of Neurology paper: cerebellar morphometry, covariance networks and classification.', href: 'https://github.com/tamelenak/pcd-spatial-analysis' },
+  ],
+};
+
+// Talks and presentations, newest first. `slides` is a file under public/; the link shows once the file is there.
+export const talks: { title: string; kind: string; event: string; date: string; slides?: string }[] = [
+  {
+    title: 'Zero-annotation cell typing for spatial proteomics in the weak-linkage regime', kind: 'Extended abstract, accepted',
+    event: 'NeurIPS 2026 Workshop on Machine Learning for Spatially Resolved High-dimensional Biology (ML4SpatialBio), Paris', date: 'December 2026',
+  },
+  {
+    title: 'Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma', kind: 'Oral presentation',
+    event: '21st Meeting of the European Association of Neuro-Oncology (EANO), Rome', date: 'September 2026', slides: 'talks/EANO2026_Kuenzle_slides.pdf',
+  },
+];
+
+// The ongoing project, shown as the figure at the top of the page.
+export const ongoing = {
+  title: 'Spatial proteomics of the immune microenvironment in primary CNS lymphoma',
+  caption: 'Ongoing work on which immune cells sit where inside a brain lymphoma: five serial multiplex sections of a synthetic lymphoma close up into one 3D cell graph.',
+};
 
 export const latest = [
   { date: 'Oct 2026', text: 'QuRad paper accepted in Computational and Structural Biotechnology Journal' },
@@ -93,39 +121,6 @@ export const links: Link[] = [
   { label: 'ORCID', href: 'https://orcid.org/0009-0005-7663-6819' },
   { label: 'GitHub', href: 'https://github.com/tamelenak' },
   { label: 'LinkedIn', href: 'https://www.linkedin.com/in/tamara-kuenzle' },
-];
-
-// First-author publications: the research items with a published or accepted paper.
-export const firstAuthor = research.filter((r) => !r.status);
-
-// Other work: co-authored papers, conference contributions and ongoing work, newest first.
-export const otherWork: { question?: string; authors: string; title: string; venue: string; year: string; doi?: string }[] = [
-  {
-    authors: 'Künzle T, et al.',
-    title: 'Zero-annotation cell typing for spatial proteomics in the weak-linkage regime',
-    venue: 'Extended abstract, accepted at the NeurIPS 2026 Workshop on Machine Learning for Spatially Resolved High-dimensional Biology (ML4SpatialBio), Paris',
-    year: '2026',
-  },
-  {
-    authors: 'Künzle T, et al.',
-    title: 'Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma',
-    venue: 'Oral presentation, 21st Meeting of the European Association of Neuro-Oncology (EANO), Rome',
-    year: '2026',
-  },
-  {
-    authors: 'Rincón de la Rosa L, Mouazer A, Navidi M, Degroodt E, Künzle T, et al.',
-    title: 'h5adify: neuro-symbolic metadata harmonization enables scalable AnnData integration with local large language models',
-    venue: 'bioRxiv',
-    year: '2026',
-    doi: '10.64898/2026.02.28.708740',
-  },
-  {
-    question: 'Which immune cells sit where inside a brain lymphoma, and does it matter?',
-    authors: 'Künzle T, et al.',
-    title: 'Spatial proteomics of the immune microenvironment in primary CNS lymphoma, from serial-section multiplex immunofluorescence',
-    venue: 'Ongoing work',
-    year: '2026',
-  },
 ];
 
 // Search and sharing metadata. Strings checked with the metadata-check skill (title 30–65, description 70–200 chars).

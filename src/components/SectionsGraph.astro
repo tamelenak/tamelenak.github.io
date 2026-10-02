@@ -8,9 +8,9 @@
 // Runs by itself in a slow loop and sways gently throughout; hovering does not stop it.
 // Drag sideways to turn it; with a mouse, up or down also pulls the sections apart or together.
 // The loop picks up again a moment after you let go.
-// short: one-line marker legend, for a figure that sits in a tight frame
-interface Props { end: 'graph' | 'mesh' | 'modes'; short?: boolean }
-const { end, short = false } = Astro.props;
+// short: one-line marker legend, for a figure that sits in a tight frame; caption: replaces the default sentence
+interface Props { end: 'graph' | 'mesh' | 'modes'; short?: boolean; caption?: string }
+const { end, short = false, caption } = Astro.props;
 const MARKERS = [
   { label: short ? 'PAX5 lymphoma' : 'PAX5, lymphoma cells', css: '#e8844f' },
   { label: short ? 'CD3 T cell' : 'CD3, T cells', css: '#f2d53c' },
@@ -22,6 +22,7 @@ const CAPTION = {
   mesh: 'Five serial multiplex sections of a synthetic lymphoma, rebuilt as 3D shapes: each tumour island becomes a surface.',
   modes: 'Five serial multiplex sections of a synthetic lymphoma, joined into a 3D cell graph and coloured by its vibration modes.',
 }[end];
+const text = caption ?? CAPTION;
 ---
 
 <figure class="recon" data-end={end}>
@@ -29,7 +30,7 @@ const CAPTION = {
     <canvas class="rc-canvas" role="img" aria-label="Five thin, multi-coloured tissue sections float in a stack, then close up and turn into a three-dimensional geometric reconstruction of the tumour."></canvas>
   </div>
   <figcaption>
-    <p>{CAPTION}</p>
+    <p>{text}</p>
     <ul class:list={['legend', { tight: short }]}>{MARKERS.map((m) => <li><i style={`--c:${m.css}`}></i>{m.label}</li>)}</ul>
   </figcaption>
 </figure>

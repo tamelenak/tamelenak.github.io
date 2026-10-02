@@ -188,8 +188,7 @@ out = {
     "vessels": [{"r": round(v["r"], 1), "pts": [[round(x, 1), round(y, 1)] for x, y in v["pts"]]} for v in vessels],
     "cells": cells,
     "edges": [list(e) for e in edges],
-    "modes": modes,
-    "eigenvalues": [round(float(x), 4) for x in vals[1:21]],
+    # the Laplacian eigenmodes (checked above) drove the old hero figure; the site no longer reads them
 }
 with open("public/tissue.json", "w") as f:
     json.dump(out, f, separators=(",", ":"))

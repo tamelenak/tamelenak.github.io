@@ -1,28 +1,26 @@
 ---
 // The homepage. Four text sizes only: name 36px, hero intro 20px, body 17px, small 14px.
-// Compact hero: text first (name, intro, logos, latest) with the 3D slide figure beside it.
-// Below, full-width sections on one two-column grid. Each paper has its own figure beside it, exactly as tall as
-// its text: plasma states, the cerebellum, QuRad, the shared RNA–image space, and the serial sections.
+// Compact hero: text first (name, intro, logos, latest) with the ongoing project's figure beside it: five serial
+// multiplex sections closing into a 3D cell graph. Below, full-width sections on one two-column grid shared by
+// About, Publications, Software, Talks and the CV. Each publication leads with its citation (title, authors with
+// her name in bold, venue), then one plain-language line; its figure sits beside it, exactly as tall as the text.
+import fs from 'node:fs';
 import { Image } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import Affiliations from '../components/Affiliations.astro';
-import SlideGraph from '../components/SlideGraph.astro';
 import PlasmaStates from '../components/PlasmaStates.astro';
 import Cerebellum from '../components/Cerebellum.astro';
 import CellFeatures from '../components/CellFeatures.astro';
 import CommonSpace from '../components/CommonSpace.astro';
 import SectionsGraph from '../components/SectionsGraph.astro';
 import portrait from '../assets/portrait.jpg';
-import { person, about, firstAuthor, otherWork, research, latest, cv, links } from '../data/site';
+import { person, about, firstAuthor, otherPublications, software, talks, ongoing, latest, cv, links, type Publication } from '../data/site';
 
-// which figure goes with which paper
-const FIG: Record<string, any> = { '10.1093/neuonc/noag190': PlasmaStates, '10.1007/s00415-026-13884-0': Cerebellum, '10.5281/zenodo.23062834': CellFeatures };
-// the two "Other work" items with a figure get a question and a plain-language line; the ongoing item reuses its research text
-const extra: Record<number, { question: string; answer: string; fig: any }> = {
-  0: { question: 'Can we tell every cell’s type in a tissue image without labelling any by hand?', answer: 'We match the cells of a multiplex image to a labelled single-cell RNA atlas, even though the two share only a few markers, and let the cell graph correct labels that disagree with their neighbours.', fig: CommonSpace },
-  3: { question: otherWork[3].question!, answer: research[1].answer, fig: SectionsGraph },
-};
-
+const FIG = { plasma: PlasmaStates, cerebellum: Cerebellum, qurad: CellFeatures, common: CommonSpace };
+// a talk's slides link appears only once its PDF is in public/
+const hasFile = (path?: string) => !!path && fs.existsSync(new URL(`../../public/${path}`, import.meta.url));
+// "2026;273:493" for a volume, "2026, accepted" for a status
+const venueLine = (r: Publication) => r.year + (r.note ? (/^\d/.test(r.note) ? `;${r.note}` : `, ${r.note}`) : '');
 const bold = (s: string) => s.replace(/Künzle T\.?/, (m) => `<b>${m}</b>`);
 const year = new Date().getFullYear();
 ---
@@ -32,7 +30,8 @@ const year = new Date().getFullYear();
     <nav class="top" aria-label="Sections">
       <a href="#about">About</a>
       <a href="#publications">Publications</a>
-      <a href="#other">Other work</a>
+      <a href="#software">Software</a>
+      <a href="#talks">Talks</a>
       <a href="#cv">CV</a>
       <a href="#contact">Contact</a>
       <button type="button" class="motion" aria-pressed="false">Pause motion</button>
@@ -51,7 +50,7 @@ const year = new Date().getFullYear();
             <ul>{latest.map((n) => <li><time>{n.date}</time> {n.text}</li>)}</ul>
           </aside>
         </div>
-        <div class="hero-visual"><SlideGraph /></div>
+        <div class="hero-visual"><SectionsGraph end="graph" caption={ongoing.caption} /></div>
       </section>
 
       <div class="catalogue">
@@ -64,61 +63,68 @@ const year = new Date().getFullYear();
         </section>
 
         <section id="publications" class="row" aria-labelledby="publications-h">
-          <h2 id="publications-h">First-author publications</h2>
+          <h2 id="publications-h">Publications</h2>
           <div class="body papers">
             {firstAuthor.map((r) => {
-              const Fig = FIG[r.cite?.doi ?? ''];
+              const Fig = r.fig && FIG[r.fig];
               return (
                 <article class="paper">
                   <div class="text">
-                    <h3>{r.question}</h3>
-                    <p class="answer">{r.answer}</p>
-                    {r.cite && (
-                      <p class="cite">
-                        <span set:html={bold(r.cite.authors)} /> {r.cite.title}. <i>{r.cite.venue}</i>. {r.cite.year}{r.cite.note && `;${r.cite.note}`}.
-                        {r.cite.doi && <> <a href={`https://doi.org/${r.cite.doi}`}>doi:{r.cite.doi}</a></>}
-                        {r.links.filter((l) => ['Code', 'Documentation'].includes(l.label)).map((l) => <> <a href={l.href}>{l.label.toLowerCase()}</a></>)}
-                      </p>
-                    )}
+                    <h3 class="title">{r.title}</h3>
+                    <p class="authors" set:html={bold(r.authors)} />
+                    <p class="venue">
+                      <i>{r.venue}</i>, {venueLine(r)}.
+                      {r.doi && <> <a href={`https://doi.org/${r.doi}`}>doi:{r.doi}</a></>}
+                      {r.links.map((l) => <> <a href={l.href}>{l.label.toLowerCase()}</a></>)}
+                    </p>
+                    {r.summary && <p class="summary">{r.summary}</p>}
                   </div>
                   <div class="fig">{Fig && <Fig />}</div>
                 </article>
               );
             })}
+            <div class="paper plain">
+              <div class="text">
+                <h3 class="sub">Other publications</h3>
+                {otherPublications.map((r) => (
+                  <p class="cite">
+                    <b class="title-inline">{r.title}</b>. <span set:html={bold(r.authors)} /> <i>{r.venue}</i>, {venueLine(r)}.
+                    {r.doi && <> <a href={`https://doi.org/${r.doi}`}>doi:{r.doi}</a></>}
+                  </p>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
-        <section id="other" class="row" aria-labelledby="other-h">
-          <h2 id="other-h">Other work</h2>
-          <div class="body papers">
-            {[0, 3].map((k) => {
-              const o = otherWork[k], x = extra[k];
-              return (
-                <article class="paper">
-                  <div class="text">
-                    <h3>{x.question}</h3>
-                    <p class="answer">{x.answer}</p>
-                    <p class="cite">
-                      <span set:html={bold(o.authors)} /> {o.title}. <i>{o.venue}</i>. {o.year}.
-                      {o.doi && <> <a href={`https://doi.org/${o.doi}`}>doi:{o.doi}</a></>}
-                    </p>
-                  </div>
-                  <div class="fig">{k === 3 ? <SectionsGraph end="graph" short /> : <x.fig />}</div>
-                </article>
-              );
-            })}
-            <ul class="paper plain">
-              {[1, 2].map((k) => {
-                const o = otherWork[k];
-                return (
-                  <li class="cite">
-                    <span set:html={bold(o.authors)} /> {o.title}. <i>{o.venue}</i>. {o.year}.
-                    {o.doi && <> <a href={`https://doi.org/${o.doi}`}>doi:{o.doi}</a></>}
-                  </li>
-                );
-              })}
-            </ul>
+        <section id="software" class="row" aria-labelledby="software-h">
+          <h2 id="software-h">Software</h2>
+          <div class="body grid2">
+            <div class="item">
+              <h3 class="title">{software.qurad.name}</h3>
+              <p>{software.qurad.description}</p>
+              <p class="links">{software.qurad.links.map((l) => <a href={l.href}>{l.label}</a>)}</p>
+            </div>
+            <div class="item">
+              <h3 class="title">Code released with the papers</h3>
+              <ul class="code">
+                {software.analysis.map((c) => <li><a href={c.href}>{c.name}</a>: {c.description}</li>)}
+              </ul>
+            </div>
           </div>
+        </section>
+
+        <section id="talks" class="row" aria-labelledby="talks-h">
+          <h2 id="talks-h">Talks</h2>
+          <ol class="body grid2 talks">
+            {talks.map((t) => (
+              <li class="item">
+                <time>{t.date}</time>
+                <h3 class="title">{t.title}</h3>
+                <p>{t.kind}, {t.event}.{hasFile(t.slides) && <> <a href={`/${t.slides}`}>slides (PDF)</a></>}</p>
+              </li>
+            ))}
+          </ol>
         </section>
 
         <section id="cv" class="row" aria-labelledby="cv-h">
@@ -231,19 +237,11 @@ const year = new Date().getFullYear();
   /* one paragraph per column; widths start in proportion to the text lengths and the script evens the heights */
   .about-text { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--colgap); align-items: start; }
 
-  .research { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr); gap: 40px; align-items: stretch; }
-  .research .q:last-child { margin-bottom: 0; }
-  .other { display: grid; grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1fr); gap: 40px; align-items: stretch; }
-  .q { margin-bottom: 26px; }
-  .q h3, .pubs h3 { font-size: inherit; font-weight: 600; line-height: 1.4; margin-bottom: 3px; color: var(--ink); }
-  .cite, .pubs li { color: #3a443f; }
-  .cite :global(b), .pubs :global(b) { font-weight: 600; color: var(--ink); }
   /* a figure beside a text block takes that block's height: it is laid out absolutely so it adds none of its own */
   .aside { position: relative; min-height: 300px; }
   .aside > :global(figure) { position: absolute; inset: 0; height: auto; }
   .aside :global(.stage) { min-height: 0; }
 
-  .pubs { display: grid; gap: 16px; align-content: start; }
   /* One row per paper: the text, and its figure beside it. The text sets the row's height and the figure,
      caption included, fills exactly that height (it is laid out absolutely, so it adds none of its own). */
   .papers { display: grid; gap: 44px; }
@@ -253,14 +251,26 @@ const year = new Date().getFullYear();
 
   /* the talk and the preprint have no figure: they share one row, in the same two columns */
   .paper.plain { list-style: none; margin: 0; padding: 0; }
-  .paper h3 { font-size: inherit; font-weight: 600; line-height: 1.4; margin-bottom: 4px; }
-  .answer { margin-bottom: 6px; }
+  /* a publication: the citation leads (title, authors, venue), then one muted plain-language line */
+  .paper .title, .item .title { font-size: inherit; font-weight: 600; line-height: 1.4; color: var(--ink); }
+  .authors { color: #3a443f; }
+  .authors :global(b), .cite :global(b) { font-weight: 600; color: var(--ink); }
+  .venue, .cite { color: #3a443f; }
+  .summary { margin-top: 6px; font-size: var(--small); line-height: 1.5; color: var(--muted); }
+  .sub { font-size: var(--small); font-weight: 400; font-style: italic; color: var(--muted); margin-bottom: 4px; }
+  .title-inline { font-weight: 600; color: var(--ink); }
+  /* Software and Talks: two items side by side, on the same columns as the papers and the CV */
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px var(--colgap); align-items: start; list-style: none; padding: 0; }
+  .item { display: grid; gap: 4px; align-content: start; }
+  .item p { color: #3a443f; }
+  .links { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .code { display: grid; gap: 6px; color: #3a443f; }
+  .code a { font-weight: 600; }
+  .talks time { font-size: var(--small); }
   .fig { position: relative; min-height: 0; }
   .fig > :global(figure) { position: absolute; inset: 0; height: auto; }
   .fig :global(.stage) { min-height: 0; }
   .fig :global(.readout) { min-height: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* the serial-sections figure keeps its marker legend but not its sentence, so it fits the same frame */
-  .fig :global(.recon figcaption p) { display: none; }
   /* grids rather than CSS columns, so rows line up across the two columns */
   .cv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), auto); grid-auto-flow: column; gap: 14px var(--colgap); }
   .cv li { display: grid; grid-template-columns: 104px 1fr; gap: 14px; }
@@ -279,16 +289,15 @@ const year = new Date().getFullYear();
     .catalogue { padding-bottom: 64px; }
     .row { grid-template-columns: 1fr; gap: 12px; padding: 36px 0; }
     .about-text { grid-template-columns: 1fr !important; gap: 1em; }
-    .research, .other { grid-template-columns: 1fr; }
     .paper { grid-template-columns: 1fr; gap: 16px; }
     .paper.plain { gap: 16px; }
+    .grid2 { grid-template-columns: 1fr; gap: 24px; }
     .fig > :global(figure) { position: static; }
     .fig :global(.stage) { aspect-ratio: 16 / 10; }
     .fig :global(.readout) { white-space: normal; min-height: 3em; }
     .aside { min-height: 0; }
     .aside > :global(figure) { position: static; }
     .aside :global(.stage) { aspect-ratio: 1 / 1; }
-    .other .aside :global(.stage) { aspect-ratio: 4 / 3; }
     .cv { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-flow: row; }
     .cv li { grid-template-columns: 1fr; gap: 0; }
     .foot { padding: 0 20px 32px; }
