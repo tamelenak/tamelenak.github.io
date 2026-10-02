@@ -48,7 +48,7 @@ const graph = {
     ...(software ? [{
       '@type': 'SoftwareSourceCode', '@id': `https://doi.org/${software.cite!.doi}`, name: 'QuRad',
       description: 'Open-source QuPath extension for radiomic feature extraction from cell detections.',
-      codeRepository: 'https://github.com/icm-dac/QuRad', identifier: `https://doi.org/${software.cite!.doi}`, author: { '@id': `${url}#person` },
+      codeRepository: 'https://github.com/institutducerveau/QuRad', identifier: `https://doi.org/${software.cite!.doi}`, author: { '@id': `${url}#person` },
     }] : []),
   ],
 };

@@ -59,10 +59,10 @@ export const research: {
     question: 'Can we measure the shape and texture of every cell on a slide?',
     answer:
       'QuRad is an open-source QuPath extension we built. It computes 103 radiomic features of shape, intensity and texture for every cell, each checked against PyRadiomics.',
-    cite: { authors: 'Künzle T, Arslan J, Güner Y, Alentorn A.', title: 'QuRad: radiomic feature extraction from cell detections in QuPath', venue: 'Computational and Structural Biotechnology Journal, accepted', year: '2026', doi: '10.5281/zenodo.20628111' },
+    cite: { authors: 'Künzle T, Arslan J, Güner Y, Alentorn A.', title: 'QuRad: radiomic feature extraction from cell detections in QuPath', venue: 'Computational and Structural Biotechnology Journal, accepted', year: '2026', doi: '10.5281/zenodo.23062834' },
     links: [
-      { label: 'Software', href: 'https://github.com/icm-dac/QuRad' },
-      { label: 'Documentation', href: 'https://icm-dac.github.io/QuRad/' },
+      { label: 'Code', href: 'https://github.com/institutducerveau/QuRad' },
+      { label: 'Documentation', href: 'https://institutducerveau.github.io/QuRad/' },
     ],
   },
 ];

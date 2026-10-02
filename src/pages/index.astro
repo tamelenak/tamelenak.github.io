@@ -16,7 +16,7 @@ import portrait from '../assets/portrait.jpg';
 import { person, about, firstAuthor, otherWork, research, latest, cv, links } from '../data/site';
 
 // which figure goes with which paper
-const FIG: Record<string, any> = { '10.1093/neuonc/noag190': PlasmaStates, '10.1007/s00415-026-13884-0': Cerebellum, '10.5281/zenodo.20628111': CellFeatures };
+const FIG: Record<string, any> = { '10.1093/neuonc/noag190': PlasmaStates, '10.1007/s00415-026-13884-0': Cerebellum, '10.5281/zenodo.23062834': CellFeatures };
 // the two "Other work" items with a figure get a question and a plain-language line; the ongoing item reuses its research text
 const extra: Record<number, { question: string; answer: string; fig: any }> = {
   0: { question: 'Can we tell every cell’s type in a tissue image without labelling any by hand?', answer: 'We match the cells of a multiplex image to a labelled single-cell RNA atlas, even though the two share only a few markers, and let the cell graph correct labels that disagree with their neighbours.', fig: CommonSpace },
