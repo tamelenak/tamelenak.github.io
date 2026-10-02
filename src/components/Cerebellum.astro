@@ -258,7 +258,9 @@
         ctx.imageSmoothingEnabled = true;
         ctx.drawImage(off!, box.ox, box.oy, off!.width / q, off!.height / q);
         ctx.font = ITALIC; ctx.fillStyle = MUTED; ctx.textBaseline = 'alphabetic';
-        ctx.textAlign = 'left'; ctx.fillText('front', box.ox + 2, box.oy + BH * box.s - 4);
+        // "front" sits in the open space left of the notch, level with the hub; left out when there is no room
+        const fw = ctx.measureText('front').width, fx = box.ox + 0.09 * box.s;
+        if (fx - fw > 2) { ctx.textAlign = 'right'; ctx.fillText('front', fx, box.oy + C.y * box.s + 5); }
 
         // the network ring
         ctx.globalAlpha = T < GROW ? ramp(T, GROW * 0.5, GROW) : 1; ctx.lineWidth = 0.8;
