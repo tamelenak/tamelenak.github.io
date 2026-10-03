@@ -132,4 +132,6 @@ export const site = {
   orcid: '0009-0005-7663-6819',
   // Private visitor counts: set this to the GoatCounter site code (the "NAME" in NAME.goatcounter.com) to switch them on.
   goatcounter: 'tamarakuenzle',
+  // Google Search Console ownership check (HTML-tag method)
+  googleVerification: '5e4QLadDaAaww17zKY3R2ejN92peSxHYf9zSpVSbZCY',
 };
