@@ -18,7 +18,8 @@ import { person, about, firstAuthor, otherPublications, software, talks, ongoing
 
 const FIG = { plasma: PlasmaStates, cerebellum: Cerebellum, qurad: CellFeatures, common: CommonSpace };
 // a talk's slides link appears only once its PDF is in public/
-const hasFile = (path?: string) => !!path && fs.existsSync(new URL(`../../public/${path}`, import.meta.url));
+// (from the project root: in the production build import.meta.url points into the bundle, not src/pages)
+const hasFile = (path?: string) => !!path && fs.existsSync(`${process.cwd()}/public/${path}`);
 // "2026;273:493" for a volume, "2026, accepted" for a status
 const venueLine = (r: Publication) => r.year + (r.note ? (/^\d/.test(r.note) ? `;${r.note}` : `, ${r.note}`) : '');
 const bold = (s: string) => s.replace(/Künzle T\.?/, (m) => `<b>${m}</b>`);
