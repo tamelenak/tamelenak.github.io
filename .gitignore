@@ -1,5 +1,8 @@
 # Private originals — never publish (CV has a phone number)
 *.pdf
+# except talk slides she has checked for the site
+!public/talks/*.pdf
+*.pptx
 Facetune_*.JPG
 IMG_*.JPG
 content/

@@ -4,6 +4,7 @@
 
 - [Homepage](https://tamelenak.github.io/): publications, software, posters and talks, CV and contact.
 - [ORCID](https://orcid.org/0009-0005-7663-6819)
+- [Google Scholar](https://scholar.google.com/citations?user=R8uYAwYAAAAJ)
 - [GitHub](https://github.com/tamelenak)
 
 ## First-author publications
@@ -21,4 +22,4 @@
 ## Posters and talks
 
 - Zero-annotation cell typing for spatial proteomics in the weak-linkage regime. Poster, NeurIPS 2026 Workshop on Machine Learning for Spatially Resolved High-dimensional Biology (ML4SpatialBio), Paris, December 2026.
-- Plasma proteomics for prognostic stratification in newly diagnosed PCNSL. Oral presentation, 21st Meeting of the European Association of Neuro-Oncology (EANO), Rome, September 2026.
+- Plasma proteomics for prognostic stratification in newly diagnosed PCNSL. Oral presentation, 21st Meeting of the European Association of Neuro-Oncology (EANO), Rome, September 2026. Slides: https://tamelenak.github.io/talks/EANO2026_Kuenzle_slides.pdf

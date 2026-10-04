@@ -116,6 +116,7 @@ export const cv = [
 
 export const links: Link[] = [
   { label: 'ORCID', href: 'https://orcid.org/0009-0005-7663-6819' },
+  { label: 'Google Scholar', href: 'https://scholar.google.com/citations?user=R8uYAwYAAAAJ' },
   { label: 'GitHub', href: 'https://github.com/tamelenak' },
   { label: 'LinkedIn', href: 'https://www.linkedin.com/in/tamara-kuenzle' },
 ];
