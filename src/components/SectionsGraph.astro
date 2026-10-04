@@ -8,6 +8,9 @@
 // Runs by itself in a slow loop and sways gently throughout; hovering does not stop it.
 // Drag sideways to turn it; with a mouse, up or down also pulls the sections apart or together.
 // The loop picks up again a moment after you let go.
+// The graph ending falls asleep after a minute with no mouse, keys, touch or scrolling: the stack closes, the cells
+// hop apart, and the sheet curls up into a ball that breathes slowly. Any movement wakes it; it uncurls with a small
+// stretch and the loop carries on. Never with reduced motion or motion paused, since nothing moves then.
 // short: one-line marker legend, for a figure that sits in a tight frame; caption: replaces the default sentence
 interface Props { end: 'graph' | 'mesh' | 'modes'; short?: boolean; caption?: string }
 const { end, short = false, caption } = Astro.props;
@@ -75,6 +78,109 @@ const text = caption ?? CAPTION;
     let mode = 0, mix = 0, modeClock = 0, time = 0, rotBias = 0;
     const px = new Float32Array(r.nodes.length), py = new Float32Array(r.nodes.length);
 
+    // ---- sleep (graph ending only) ----
+    // The closed stack curls up the way a sheet of paper rolls into a ball: every point keeps its distance from the
+    // centre along the surface, the rectangle turning into a disc of the same area as it goes, and the five sections
+    // become thin shells, the lowest outside. curl 0 is flat, 1 a closed ball; a little below 0 is the stretch on waking.
+    const sleeps = end === 'graph' && !reduce;
+    const idleParam = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get('idle')) : 0; // ?idle=5 in development
+    const IDLE = idleParam > 0 ? idleParam * 1000 : 60_000;
+    const HOP = 0.95, RD = Math.sqrt((X * Y) / Math.PI), ZB = RD / Math.PI; // hop length (s), disc radius, ball centre height
+    let sleep: 'awake' | 'falling' | 'asleep' | 'waking' = 'awake', lastActive = performance.now(), hopT = -1, curl = 0, curlV = 0, nap = 0;
+    const rnd = (i: number, k: number) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
+    const home = r.nodes.map(([x, y], i) => {
+      const u = x - X / 2, v = y - Y / 2, a = u / (X / 2), b = v / (Y / 2);
+      // the rectangle → disc map keeps neighbours together, so the graph's edges stay short in the ball
+      return { u, v, du: a * Math.sqrt(1 - (b * b) / 2) * RD, dv: b * Math.sqrt(1 - (a * a) / 2) * RD, delay: rnd(i, 1) * 0.45, lift: 18 + rnd(i, 2) * 28 };
+    });
+    const sx = new Float32Array(r.nodes.length), sy = new Float32Array(r.nodes.length), depth = new Float32Array(r.nodes.length);
+    const order = r.nodes.map((_, i) => i);
+    const NODE_RGB = NODE.map((c) => [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16)));
+    const PAPER = [236, 238, 234];
+    // a spring on curl (response in seconds, damping 1 = no overshoot), so waking can interrupt falling asleep at any point
+    function spring(target: number, response: number, damping: number, dt: number) {
+      const k = ((2 * Math.PI) / response) ** 2, c = (4 * Math.PI * damping) / response;
+      for (let t = 0; t < dt; t += 1 / 120) { const s = Math.min(1 / 120, dt - t); curlV += (-k * (curl - target) - c * curlV) * s; curl += curlV * s; }
+    }
+    const capP = fig.querySelector<HTMLElement>('figcaption p')!, awakeText = capP.textContent ?? '';
+    const asleepText = `The cells have curled up to sleep. ${matchMedia('(hover: hover)').matches ? 'Move the mouse' : 'Touch the page'} to wake them.`;
+    let capShown = awakeText;
+    const say = (t: string) => { if (t === capShown) return; capShown = t; capP.style.opacity = '0'; setTimeout(() => { capP.textContent = capShown; capP.style.opacity = ''; }, 220); };
+    const fallAsleep = () => { sleep = 'falling'; auto = false; nap = 0; };
+    function updateSleep(now: number, dt: number) {
+      if (sleep === 'awake' && visible && !dragging && now - lastActive > IDLE && document.visibilityState === 'visible') fallAsleep();
+      if (sleep === 'awake') return;
+      if (sleep !== 'waking') {
+        nap += dt;
+        // close the stack and come to rest, then hop, then curl up
+        sep = sep < 0.002 ? 0 : sep * Math.exp(-dt / 0.45); rot *= Math.exp(-dt / 1.2);
+        if (hopT < 0 && sep < 0.03) hopT = 0;
+        if (hopT > 0.85) spring(1, 2.4, 1, dt);
+        if (curl > 0.9) { sleep = 'asleep'; say(asleepText); }
+      } else {
+        spring(0, 1.5, 0.6, dt);
+        if (Math.abs(curl) < 0.004 && Math.abs(curlV) < 0.02 && (hopT < 0 || hopT > HOP)) { curl = curlV = 0; hopT = -1; sleep = 'awake'; lastActive = now; resume(); }
+      }
+      if (hopT >= 0) hopT += dt;
+    }
+    const wake = () => { lastActive = performance.now(); if (sleep === 'falling' || sleep === 'asleep') { sleep = 'waking'; say(awakeText); last = performance.now(); request(); } };
+    if (sleeps) {
+      for (const ev of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'scroll', 'touchstart']) window.addEventListener(ev, wake, { passive: true });
+      document.addEventListener('visibilitychange', () => { lastActive = performance.now(); });
+    }
+
+    // the graph while it hops, curls or sleeps: one pass, nodes painted back to front
+    function drawSleeping(gap: number) {
+      const m = Math.min(1, Math.max(0, curl)), mm = smooth(0, 1, m), s = ((curl < 0 ? curl / 2 : curl) * Math.PI) / RD, thin = 1 - 0.72 * mm;
+      const spread = 1 + 0.12 * Math.sin(Math.PI * Math.min(1, Math.max(0, hopT / HOP)));
+      const breath = 1 + 0.028 * Math.sin((nap * Math.PI * 2) / 4.6) * smooth(0.85, 1, curl);
+      // zoom in on the ball as it forms, keeping it in the middle of the frame
+      const Z = 1 + 0.6 * mm, S2 = S * Z, za = ((N - 1) * gap * (1 - mm)) / 2 + ZB * mm, cy2 = h / 2 + S2 * za * KZ;
+      let top = Infinity, right = -Infinity, left = Infinity;
+      r.nodes.forEach((n, i) => {
+        const H = home[i];
+        const pu = (H.u + (H.du - H.u) * mm) * spread, pv = (H.v + (H.dv - H.v) * mm) * spread, rho = Math.hypot(pu, pv);
+        const phi = s * rho, along = Math.abs(s) < 1e-7 ? rho : Math.sin(phi) / s, up = Math.abs(s) < 1e-7 ? (s * rho * rho) / 2 : (1 - Math.cos(phi)) / s;
+        const off = n[2] * gap * thin, k = rho > 1e-6 ? (along - Math.sin(phi) * off) / rho : 0;
+        const ht = hopT < 0 ? -1 : (hopT - H.delay) / 0.5, hop = ht > 0 && ht < 1 ? H.lift * 4 * ht * (1 - ht) : 0;
+        const u = pu * k * breath, v = pv * k * breath, z = ZB + (up + Math.cos(phi) * off + hop - ZB) * breath;
+        sx[i] = cx + S2 * (u * cyw - v * syw); sy[i] = cy2 + S2 * (u * syw + v * cyw) * KY - S2 * z * KZ;
+        depth[i] = (u * syw + v * cyw) * KZ + z * KY;
+        if (sy[i] < top) top = sy[i]; if (sx[i] > right) right = sx[i]; if (sx[i] < left) left = sx[i];
+      });
+      // the sections' outlines belong to the flat stack; they fade as it curls
+      const oa = 1 - smooth(0, 0.25, Math.abs(curl));
+      if (oa > 0.01) {
+        ctx.strokeStyle = `rgba(29,37,33,${0.16 * oa})`; ctx.lineWidth = 0.8;
+        for (let lv = 0; lv < N; lv++) {
+          const z = lv * gap, c = [P(0, 0, z), P(X, 0, z), P(X, Y, z), P(0, Y, z)];
+          ctx.beginPath(); c.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.stroke();
+        }
+      }
+      ctx.strokeStyle = 'rgba(29,37,33,0.17)'; ctx.lineWidth = 0.6; ctx.beginPath();
+      for (const [i, j] of r.edges) { ctx.moveTo(sx[i], sy[i]); ctx.lineTo(sx[j], sy[j]); }
+      ctx.stroke();
+      order.sort((a, b) => depth[a] - depth[b]);
+      let d0 = Infinity, d1 = -Infinity; for (let i = 0; i < depth.length; i++) { if (depth[i] < d0) d0 = depth[i]; if (depth[i] > d1) d1 = depth[i]; }
+      const R = Math.max(1.6, 3.6 * S2 + 0.8);
+      for (const i of order) {
+        const back = (1 - (depth[i] - d0) / (d1 - d0 || 1)) * mm, c = NODE_RGB[r.nodes[i][3]], f = 0.5 * back;
+        ctx.fillStyle = `rgb(${c.map((x, q) => Math.round(x + (PAPER[q] - x) * f)).join(',')})`;
+        ctx.beginPath(); ctx.arc(sx[i], sy[i], (r.nodes[i][3] === 3 ? R * 0.65 : R) * (1 - 0.2 * back), 0, 7); ctx.fill();
+      }
+      // and, once it is properly asleep, a few z's drifting up from it
+      const zz = smooth(0.92, 1, curl) * (sleep === 'waking' ? 0 : 1);
+      if (zz > 0.01) {
+        ctx.font = "italic 14px 'Newsreader Variable', Georgia, serif"; ctx.fillStyle = '#5f6964';
+        const bx = left + (right - left) * 0.72;
+        for (let j = 0; j < 3; j++) {
+          const p = ((nap + j * 1.4) % 4.2) / 4.2;
+          ctx.globalAlpha = zz * Math.sin(Math.PI * p) * 0.85; ctx.fillText('z', bx + p * 22 + j * 3, top - 6 - p * 40);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
     const smooth = (a: number, b: number, v: number) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u); };
     const P = (x: number, y: number, z: number): [number, number] => {
       const u = x - X / 2, v = y - Y / 2;
@@ -87,6 +193,7 @@ const text = caption ?? CAPTION;
     function frame(now: number) {
       raf = 0;
       const dt = motionPaused() ? 0 : Math.min(0.05, (now - last) / 1000 || 0); last = now;
+      if (sleeps && dt) updateSleep(now, dt);
       // the loop opens and closes the stack; a slow sway keeps it alive during the holds, wider once it is assembled
       if (auto && !dragging) { clock += dt; sep = sepAt(clock); rotBias *= Math.exp(-dt / 1.1); rot = sway(clock, sep) + rotBias; }
       if (!reduce && end === 'modes') {
@@ -99,6 +206,7 @@ const text = caption ?? CAPTION;
       S = Math.min((w * 0.97) / bw, (h * 0.96) / bh);
       cx = w / 2; cy = h / 2 + (zTop * KZ * S) / 2;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+      if (sleeps && (hopT >= 0 || curl !== 0)) { drawSleeping(gap); if (visible && !motionPaused()) request(); return; }
 
       const imgA = smooth(0.16, 0.6, sep), geoA = 1 - smooth(0.3, 0.85, sep);
       r.nodes.forEach((n, i) => { const q = P(n[0], n[1], n[2] * gap); px[i] = q[0]; py[i] = q[1]; });
@@ -193,7 +301,9 @@ const text = caption ?? CAPTION;
     if (import.meta.env.DEV) { // test hooks for development only; stripped from the published build
       (fig as any).__frame = (s?: number, ro?: number) => { if (s !== undefined) { auto = false; sep = s; rot = ro ?? 0; } frame(performance.now()); };
       (fig as any).__sim = (seconds: number) => { let tm = last || performance.now(); for (let i = 0; i < seconds * 25; i++) frame((tm += 40)); };
-      (fig as any).__state = () => ({ sep: +sep.toFixed(3), rot: +rot.toFixed(3), auto });
+      (fig as any).__state = () => ({ sep: +sep.toFixed(3), rot: +rot.toFixed(3), auto, sleep, curl: +curl.toFixed(3), hopT: +hopT.toFixed(2) });
+      (fig as any).__sleep = fallAsleep;
+      (fig as any).__wake = wake;
       (fig as any).__click = () => { dragging = true; auto = false; dragging = false; resume(); };
       (fig as any).__auto = () => { auto = !reduce; };
     }
@@ -208,7 +318,7 @@ const text = caption ?? CAPTION;
   .stage:active { cursor: grabbing; }
   .rc-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   figcaption { font-size: 14px; line-height: 1.5; color: #5f6964; display: grid; gap: 4px; }
-  figcaption p { margin: 0; }
+  figcaption p { margin: 0; transition: opacity 0.22s ease; }
   .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 16px; color: #1d2521; }
   .legend.tight { column-gap: 12px; }
   .legend li { display: inline-flex; align-items: center; gap: 6px; }
