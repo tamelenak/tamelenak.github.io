@@ -11,7 +11,7 @@
 
 - Plasma proteomics for prognostic stratification in newly diagnosed primary central nervous system lymphoma. Neuro-Oncology, 2026. https://doi.org/10.1093/neuonc/noag190
 - Spatial analysis of paraneoplastic cerebellar degeneration in ovarian cancer with anti-Yo syndrome and SCA1. Journal of Neurology, 2026;273:493. https://doi.org/10.1007/s00415-026-13884-0
-- QuRad: radiomic feature extraction from cell detections in QuPath. Computational and Structural Biotechnology Journal, 2026, accepted.
+- QuRad: radiomics feature extraction for QuPath. Computational and Structural Biotechnology Journal, 2026;35:0238 (joint first author). https://doi.org/10.34133/csbj.0238
 
 ## Software
 

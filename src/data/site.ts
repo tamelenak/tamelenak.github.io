@@ -40,8 +40,8 @@ export const firstAuthor: Publication[] = [
     links: [{ label: 'Code', href: 'https://github.com/tamelenak/pcd-spatial-analysis' }], fig: 'cerebellum',
   },
   {
-    title: 'QuRad: radiomic feature extraction from cell detections in QuPath',
-    authors: 'Künzle T, Arslan J, Güner Y, Alentorn A.', venue: 'Computational and Structural Biotechnology Journal', year: '2026', note: 'accepted',
+    title: 'QuRad: radiomics feature extraction for QuPath',
+    authors: 'Arslan J†, Künzle T†, Güner Y, Alentorn A. †Equal contribution.', venue: 'Computational and Structural Biotechnology Journal', year: '2026', note: '35:0238', doi: '10.34133/csbj.0238',
     summary: 'An open-source QuPath extension that computes 103 radiomic features of shape, intensity and texture for every cell, each checked against PyRadiomics.',
     links: [{ label: 'Code', href: 'https://github.com/institutducerveau/QuRad' }, { label: 'Documentation', href: 'https://institutducerveau.github.io/QuRad/' }], fig: 'qurad',
   },
@@ -93,7 +93,7 @@ export const ongoing = {
 };
 
 export const latest = [
-  { date: 'Oct 2026', text: 'QuRad paper accepted in Computational and Structural Biotechnology Journal' },
+  { date: 'Oct 2026', text: 'QuRad paper published in Computational and Structural Biotechnology Journal' },
   { date: 'Sept 2026', text: 'Poster accepted at the NeurIPS 2026 ML4SpatialBio workshop' },
   { date: 'Sept 2026', text: 'Gave a talk at EANO 2026 in Rome' },
   { date: 'Sept 2026', text: 'Plasma proteomics paper published in Neuro-Oncology' },

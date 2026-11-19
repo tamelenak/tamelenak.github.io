@@ -17,7 +17,7 @@ const photo = await getImage({ src: portrait, width: 600, format: 'jpg' });
 // One linked graph: the website, the profile page, the person, and her first-author work.
 const papers = firstAuthor.filter((r) => r.doi);
 const zenodo = software.qurad.links.find((l) => l.label === 'Zenodo')!.href, repo = software.qurad.links.find((l) => l.label === 'GitHub')!.href;
-const published: Record<string, string> = { '10.1093/neuonc/noag190': '2026-09-23', '10.1007/s00415-026-13884-0': '2026-07-27' };
+const published: Record<string, string> = { '10.1093/neuonc/noag190': '2026-09-23', '10.1007/s00415-026-13884-0': '2026-07-27', '10.34133/csbj.0238': '2026-10-19' };
 const graph = {
   '@context': 'https://schema.org',
   '@graph': [
